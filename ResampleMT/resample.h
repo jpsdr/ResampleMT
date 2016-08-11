@@ -1,0 +1,233 @@
+// Avisynth v2.5.  Copyright 2002 Ben Rudiak-Gould et al.
+// http://www.avisynth.org
+
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
+// http://www.gnu.org/copyleft/gpl.html .
+//
+// Linking Avisynth statically or dynamically with other modules is making a
+// combined work based on Avisynth.  Thus, the terms and conditions of the GNU
+// General Public License cover the whole combination.
+//
+// As a special exception, the copyright holders of Avisynth give you
+// permission to link Avisynth with independent modules that communicate with
+// Avisynth solely through the interfaces defined in avisynth.h, regardless of the license
+// terms of these independent modules, and to copy and distribute the
+// resulting combined work under terms of your choice, provided that
+// every copy of the combined work is accompanied by a complete copy of
+// the source code of Avisynth (the version of Avisynth used to produce the
+// combined work), being distributed under the terms of the GNU General
+// Public License plus this exception.  An independent module is a module
+// which is not derived from or based on Avisynth, such as 3rd-party filters,
+// import and export plugins, or graphical user interfaces.
+
+#ifndef __Resample_H__
+#define __Resample_H__
+
+#include <stdint.h>
+#include <windows.h>
+#include "avisynth.h"
+#include "resample_functions.h"
+
+#define MAX_MT_THREADS 128
+
+// Resizer function pointer
+typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int MinY, int MaxY, const int* pitch_table, const void* storage);
+typedef void (*ResamplerH)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int target_height);
+
+typedef struct _MT_Data_Info
+{
+	const BYTE*src1,*src2,*src3;
+	BYTE *dst1,*dst2,*dst3;
+	int src_pitch1,src_pitch2,src_pitch3;
+	int dst_pitch1,dst_pitch2,dst_pitch3;
+	int32_t src_Y_h_min,src_Y_h_max,src_Y_w;
+	int32_t src_UV_h_min,src_UV_h_max,src_UV_w;
+	int32_t dst_Y_h_min,dst_Y_h_max,dst_Y_w;
+	int32_t dst_UV_h_min,dst_UV_h_max,dst_UV_w;
+	void *filter_storage_luma,*filter_storage_chromaU,*filter_storage_chromaV;
+	int *src_pitch_table_luma,*src_pitch_table_chromaU,*src_pitch_table_chromaV;
+	ResamplingProgram *resampling_program_luma,*resampling_program_chroma;
+	bool top,bottom;
+} MT_Data_Info;
+
+
+typedef struct _MT_Data_Thread
+{
+	void *pClass;
+	uint8_t f_process,thread_Id;
+	HANDLE nextJob, jobFinished;
+} MT_Data_Thread;
+
+
+/**
+  * Class to resize in the horizontal direction using a specified sampling filter
+  * Helper for resample functions
+ **/
+class FilteredResizeH : public GenericVideoFilter
+{
+public:
+  FilteredResizeH( PClip _child, double subrange_left, double subrange_width, int target_width, int _threads, bool _avsp, 
+                   ResamplingFunction* func, IScriptEnvironment* env );
+  virtual ~FilteredResizeH(void);
+  PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
+
+  int __stdcall SetCacheHints(int cachehints, int frame_range);
+
+  static ResamplerH GetResampler(int CPU, bool aligned, int pixelsize, ResamplingProgram* program, IScriptEnvironment* env);
+
+private:
+	HANDLE thds[MAX_MT_THREADS];
+	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
+	MT_Data_Info MT_Data[MAX_MT_THREADS];
+	DWORD tids[MAX_MT_THREADS];
+	uint8_t CPUs_number,threads_number;
+	HANDLE ghMutex;
+	
+	static DWORD WINAPI StaticThreadpoolH( LPVOID lpParam );
+
+	uint8_t CreateMTData(uint8_t max_threads,int32_t src_size_x,int32_t src_size_y,int32_t dst_size_x,int32_t dst_size_y, int UV_w, int UV_h);
+
+	void FreeData(void);
+
+	int threads;
+	
+	void ResamplerLumaMT(uint8_t thread_num);
+	void ResamplerUChromaMT(uint8_t thread_num);
+	void ResamplerVChromaMT(uint8_t thread_num);
+	
+
+  // Resampling
+  ResamplingProgram *resampling_program_luma;
+  ResamplingProgram *resampling_program_chroma;
+
+  // Note: these pointer are currently not used; they are used to pass data into run-time resampler.
+  // They are kept because this may be needed later (like when we implemented actual horizontal resizer.)
+  void* filter_storage_luma;
+  void* filter_storage_chroma;
+
+  int src_width, src_height, dst_width, dst_height;
+  bool grey,avsp;
+  int pixelsize; // AVS16
+
+  ResamplerH resampler_h_luma;
+  ResamplerH resampler_h_chroma;
+};
+
+
+/**
+  * Class to resize in the vertical direction using a specified sampling filter
+  * Helper for resample functions
+ **/
+class FilteredResizeV : public GenericVideoFilter
+{
+public:
+  FilteredResizeV( PClip _child, double subrange_top, double subrange_height, int target_height, int _threads, bool _avsp,
+		ResamplingFunction* func, IScriptEnvironment* env);
+  virtual ~FilteredResizeV(void);
+  PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
+
+	int __stdcall SetCacheHints(int cachehints, int frame_range);
+
+  static ResamplerV GetResampler(int CPU, bool aligned,int pixelsize, void*& storage, ResamplingProgram* program);
+
+private:
+	HANDLE thds[MAX_MT_THREADS];
+	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
+	MT_Data_Info MT_Data[MAX_MT_THREADS];
+	DWORD tids[MAX_MT_THREADS];
+	uint8_t CPUs_number,threads_number;
+	HANDLE ghMutex;
+	
+	static DWORD WINAPI StaticThreadpoolV( LPVOID lpParam );
+
+	uint8_t CreateMTData(uint8_t max_threads,int32_t src_size_x,int32_t src_size_y,int32_t dst_size_x,int32_t dst_size_y, int UV_w, int UV_h);
+
+	void FreeData(void);
+
+	int threads;
+
+	void ResamplerLumaAlignedMT(uint8_t thread_num);
+	void ResamplerLumaUnalignedMT(uint8_t thread_num);
+	void ResamplerUChromaAlignedMT(uint8_t thread_num);
+	void ResamplerUChromaUnalignedMT(uint8_t thread_num);
+	void ResamplerVChromaAlignedMT(uint8_t thread_num);
+	void ResamplerVChromaUnalignedMT(uint8_t thread_num);
+
+  bool grey,avsp;
+  int pixelsize; // AVS16
+	
+  ResamplingProgram *resampling_program_luma;
+  ResamplingProgram *resampling_program_chroma;
+  int *src_pitch_table_luma;
+  int *src_pitch_table_chromaU;
+  int *src_pitch_table_chromaV;
+  int src_pitch_luma;
+  int src_pitch_chromaU;
+  int src_pitch_chromaV;
+
+  // Note: these pointer are currently not used; they are used to pass data into run-time resampler.
+  // They are kept because this may be needed later (like when we implemented actual horizontal resizer.)
+  void* filter_storage_luma_aligned;
+  void* filter_storage_luma_unaligned;
+  void* filter_storage_chroma_aligned;
+  void* filter_storage_chroma_unaligned;
+
+  ResamplerV resampler_luma_aligned;
+  ResamplerV resampler_luma_unaligned;
+  ResamplerV resampler_chroma_aligned;
+  ResamplerV resampler_chroma_unaligned;
+};
+
+
+
+class FilteredResizeMT
+{
+public:
+static PClip CreateResizeV( PClip clip, double subrange_top, double subrange_height, int target_height, 
+                             int _threads, bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
+static PClip CreateResizeH( PClip clip, double subrange_top, double subrange_height, int target_height, 
+                             int _threads, bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
+
+static PClip CreateResize( PClip clip, int target_width, int target_height, int _threads, const AVSValue* args, 
+                           ResamplingFunction* f, IScriptEnvironment* env );
+
+static AVSValue __cdecl Create_PointResize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_BilinearResize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_BicubicResize(AVSValue args, void*, IScriptEnvironment* env);
+
+// 09-14-2002 - Vlad59 - Lanczos3Resize - 
+static AVSValue __cdecl Create_LanczosResize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_Lanczos4Resize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_BlackmanResize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_Spline16Resize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_Spline36Resize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_Spline64Resize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_GaussianResize(AVSValue args, void*, IScriptEnvironment* env);
+
+static AVSValue __cdecl Create_SincResize(AVSValue args, void*, IScriptEnvironment* env);
+};
+
+
+#endif // __Resample_H__
+
+
