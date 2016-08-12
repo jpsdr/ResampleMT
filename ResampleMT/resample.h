@@ -119,7 +119,7 @@ private:
 
   int src_width, src_height, dst_width, dst_height;
   bool grey,avsp;
-  int pixelsize; // AVS16
+  uint8_t pixelsize; // AVS16
 
   ResamplerH resampler_h_luma;
   ResamplerH resampler_h_chroma;
@@ -166,7 +166,7 @@ private:
 	void ResamplerVChromaUnalignedMT(uint8_t thread_num);
 
   bool grey,avsp;
-  int pixelsize; // AVS16
+  uint8_t pixelsize; // AVS16
 	
   ResamplingProgram *resampling_program_luma;
   ResamplingProgram *resampling_program_chroma;

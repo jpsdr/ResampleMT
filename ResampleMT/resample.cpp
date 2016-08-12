@@ -85,7 +85,7 @@ static void resize_v_planar_pointresize(BYTE* dst, const BYTE* src, int dst_pitc
 
   for (int y = MinY; y < MaxY; y++) {
     int offset = program->pixel_offset[y];
-	const pixel_size* src_ptr = src0 + pitch_table[offset]/sizeof(pixel_size);
+	const pixel_size* src_ptr = src0 + pitch_table[offset];
     
 	memcpy(dst0, src_ptr, width*sizeof(pixel_size));
 
@@ -106,10 +106,9 @@ static void resize_v_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 
     for (int x = 0; x < width; x++) {
       int result = 0;
-      for (int i = 0; i < filter_size; i++) {
+      for (int i = 0; i < filter_size; i++)
         result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
-      }
-      result = ((result+8192)/16384);
+	  result = (result+8192) >> 14;
       result = result > 255 ? 255 : result < 0 ? 0 : result;
       dst[x] = (BYTE) result;
     }
@@ -134,14 +133,13 @@ static void resize_v_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int s
   for (int y = MinY; y < MaxY; y++)
   {
     int offset = program->pixel_offset[y];
-	const float* src_ptr = src0 + (pitch_table[offset] >> 2);
+	const float* src_ptr = src0 + pitch_table[offset];
 
     for (int x = 0; x < width; x++)
 	{
       float result = 0;
-      for (int i = 0; i < filter_size; i++) {
-        result += (src_ptr+(pitch_table[i] >> 2))[x] * current_coeff[i];
-      }
+      for (int i = 0; i < filter_size; i++)
+		result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
       dst0[x] = result;
     }
 
@@ -165,15 +163,14 @@ static void resize_v_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int s
   for (int y = MinY; y < MaxY; y++)
   {
     int offset = program->pixel_offset[y];
-	const uint16_t* src_ptr = src0 + (pitch_table[offset] >> 1);
+	const uint16_t* src_ptr = src0 + pitch_table[offset];
 
     for (int x = 0; x < width; x++)
 	{
       __int64 result = 0;
-      for (int i = 0; i < filter_size; i++) {
-        result += (src_ptr+(pitch_table[i] >> 1))[x] * current_coeff[i];
-      }
-      result = ((result+8192)/16384);
+      for (int i = 0; i < filter_size; i++)
+		result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
+	  result = (result+8192) >> 14;
       result = result > 65535 ? 65535 : result < 0 ? 0 : result;
       dst0[x] = (uint16_t) result;
     }
@@ -190,8 +187,8 @@ static void resize_v_mmx_planar(BYTE* dst, const BYTE* src, int dst_pitch, int s
   int filter_size = program->filter_size;
   short* current_coeff = program->pixel_coefficient + filter_size*MinY;
 
-  int wMod8 = (width / 8) * 8;
-  int sizeMod2 = (filter_size/2) * 2;
+  int wMod8 = (width >> 3) << 3;
+  int sizeMod2 = (filter_size >> 1) << 1;
   bool notMod2 = sizeMod2 < filter_size;
 
   __m64 zero = _mm_setzero_si64();
@@ -271,12 +268,13 @@ static void resize_v_mmx_planar(BYTE* dst, const BYTE* src, int dst_pitch, int s
     }
 
     // Leftover
-    for (int x = wMod8; x < width; x++) {
+    for (int x = wMod8; x < width; x++)
+	{
       int result = 0;
-      for (int i = 0; i < filter_size; i++) {
+
+      for (int i = 0; i < filter_size; i++)
         result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
-      }
-      result = ((result+8192)/16384);
+	  result = (result+8192) >> 14;
       result = result > 255 ? 255 : result < 0 ? 0 : result;
       dst[x] = (BYTE) result;
     }
@@ -295,8 +293,8 @@ static void resize_v_sse2_planar(BYTE* dst, const BYTE* src, int dst_pitch, int 
   int filter_size = program->filter_size;
   short* current_coeff = program->pixel_coefficient + filter_size*MinY;
   
-  int wMod16 = (width / 16) * 16;
-  int sizeMod2 = (filter_size/2) * 2;
+  int wMod16 = (width >> 4) << 4;
+  int sizeMod2 = (filter_size >> 1) << 1;
   bool notMod2 = sizeMod2 < filter_size;
 
   __m128i zero = _mm_setzero_si128();
@@ -376,12 +374,13 @@ static void resize_v_sse2_planar(BYTE* dst, const BYTE* src, int dst_pitch, int 
     }
 
     // Leftover
-    for (int x = wMod16; x < width; x++) {
+    for (int x = wMod16; x < width; x++)
+	{
       int result = 0;
-      for (int i = 0; i < filter_size; i++) {
+
+      for (int i = 0; i < filter_size; i++)
         result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
-      }
-      result = ((result+8192)/16384);
+	  result = (result+8192) >> 14;
       result = result > 255 ? 255 : result < 0 ? 0 : result;
       dst[x] = (BYTE) result;
     }
@@ -397,7 +396,7 @@ static void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int
   int filter_size = program->filter_size;
   short* current_coeff = program->pixel_coefficient + filter_size*MinY;
   
-  int wMod16 = (width / 16) * 16;
+  int wMod16 = (width >> 4) << 4;
 
   __m128i zero = _mm_setzero_si128();
   __m128i coeff_unpacker = _mm_set_epi8(1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0);
@@ -444,12 +443,13 @@ static void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int
     }
 
     // Leftover
-    for (int x = wMod16; x < width; x++) {
+    for (int x = wMod16; x < width; x++)
+	{
       int result = 0;
-      for (int i = 0; i < filter_size; i++) {
+
+      for (int i = 0; i < filter_size; i++)
         result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
-      }
-      result = ((result+8192)/16384);
+	  result = (result+8192) >> 14;
       result = result > 255 ? 255 : result < 0 ? 0 : result;
       dst[x] = (BYTE) result;
     }
@@ -459,11 +459,17 @@ static void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int
   }
 }
 
-__forceinline static void resize_v_create_pitch_table(int* table, int pitch, int height) {
-  table[0] = 0;
-  for (int i = 1; i < height; i++) {
-    table[i] = table[i-1]+pitch;
+__forceinline static void resize_v_create_pitch_table(int* table, int pitch, int height, uint8_t pixel_size)
+{
+  switch(pixel_size)
+  {
+	case 2 : pitch>>=1; break;
+	case 4 : pitch>>=2; break;
+	default : ;
   }
+  table[0] = 0;
+  for (int i = 1; i < height; i++)
+    table[i] = table[i-1]+pitch;
 }
 
 
@@ -472,7 +478,7 @@ __forceinline static void resize_v_create_pitch_table(int* table, int pitch, int
  ***************************************/
 
 static void resize_h_pointresize(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height) {
-  int wMod4 = width/4 * 4;
+  int wMod4 = (width >> 2) << 2;
 
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < wMod4; x+=4) {
@@ -530,17 +536,24 @@ static void resize_h_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 
   short *current_coeff=program->pixel_coefficient;
 
-  for (int x = 0; x < width; x++) {
+  for (int x = 0; x < width; x++)
+  {
     int begin = program->pixel_offset[x];
-    for (int y = 0; y < height; y++) {
+	int y_src_pitch=0,y_dst_pitch=0;
+
+    for (int y = 0; y < height; y++)
+	{
       // todo: check whether int result is enough for 16 bit samples (can an int overflow because of 16384 scale or really need __int64?)
       int result = 0;
-      for (int i = 0; i < filter_size; i++) {
-        result += (src+y*src_pitch)[(begin+i)] * current_coeff[i];
-      }
-      result = ((result + 8192) / 16384);
+
+      for (int i = 0; i < filter_size; i++)
+		result += (src+y_src_pitch)[(begin+i)] * current_coeff[i];
+	  result = (result + 8192) >> 14;
 	  result = result > 255 ? 255 : result < 0 ? 0 : result;
-      (dst + y*dst_pitch)[x] = (BYTE)result;
+	  (dst + y_dst_pitch)[x] = (BYTE)result;
+
+	  y_dst_pitch+=dst_pitch;
+	  y_src_pitch+=src_pitch;
     }
     current_coeff += filter_size;
   }
@@ -553,22 +566,29 @@ static void resize_h_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int s
 
   short *current_coeff=program->pixel_coefficient;
 
-  src_pitch = src_pitch >> 1;
-  dst_pitch = dst_pitch >> 1;
+  src_pitch>>=1;
+  dst_pitch>>=1;
 
   uint16_t* src0 = (uint16_t*)src;
   uint16_t* dst0 = (uint16_t*)dst;
 
-  for (int x = 0; x < width; x++) {
+  for (int x = 0; x < width; x++)
+  {
     int begin = program->pixel_offset[x];
-    for (int y = 0; y < height; y++) {
+	int y_src_pitch=0,y_dst_pitch=0;
+
+    for (int y = 0; y < height; y++)
+	{
       __int64 result = 0;
-      for (int i = 0; i < filter_size; i++) {
-        result += (src0+y*src_pitch)[(begin+i)] * current_coeff[i];
-      }
-      result = ((result + 8192) / 16384);
+
+      for (int i = 0; i < filter_size; i++)
+        result += (src0+y_src_pitch)[(begin+i)] * current_coeff[i];
+	  result = (result + 8192) >> 14;
 	  result = result > 65535 ? 65535 : result < 0 ? 0 : result;
-      (dst0 + y*dst_pitch)[x] = (uint16_t)result;
+      (dst0 + y_dst_pitch)[x] = (uint16_t)result;
+
+	  y_dst_pitch+=dst_pitch;
+	  y_src_pitch+=src_pitch;
     }
     current_coeff += filter_size;
   }
@@ -587,14 +607,21 @@ static void resize_h_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int s
   float* src0 = (float*)src;
   float* dst0 = (float*)dst;
 
-  for (int x = 0; x < width; x++) {
+  for (int x = 0; x < width; x++)
+  {
     int begin = program->pixel_offset[x];
-    for (int y = 0; y < height; y++) {
+	int y_src_pitch=0,y_dst_pitch=0;
+
+    for (int y = 0; y < height; y++)
+	{
       float result = 0;
-      for (int i = 0; i < filter_size; i++) {
-        result += (src0+y*src_pitch)[(begin+i)] * current_coeff[i];
-      }
-      (dst0 + y*dst_pitch)[x] = result;
+
+      for (int i = 0; i < filter_size; i++)
+        result += (src0+y_src_pitch)[(begin+i)] * current_coeff[i];
+      (dst0 + y_dst_pitch)[x] = result;
+
+	  y_dst_pitch+=dst_pitch;
+	  y_src_pitch+=src_pitch;
     }
     current_coeff += filter_size;
   }
@@ -604,12 +631,14 @@ static void resize_h_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int s
 
 
 static void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height) {
-  int filter_size = AlignNumber(program->filter_size, 8) / 8;
+  int filter_size = AlignNumber(program->filter_size, 8) >> 3;
   __m128i zero = _mm_setzero_si128();
 
-  for (int y = 0; y < height; y++) {
+  for (int y = 0; y < height; y++)
+  {
     short* current_coeff = program->pixel_coefficient;
-    for (int x = 0; x < width; x+=4) {
+    for (int x = 0; x < width; x+=4)
+	{
       __m128i result1 = _mm_setr_epi32(8192, 0, 0, 0);
       __m128i result2 = _mm_setr_epi32(8192, 0, 0, 0);
       __m128i result3 = _mm_setr_epi32(8192, 0, 0, 0);
@@ -620,49 +649,53 @@ static void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, i
       int begin3 = program->pixel_offset[x+2];
       int begin4 = program->pixel_offset[x+3];
 
-      for (int i = 0; i < filter_size; i++) {
-        __m128i data, coeff, current_result;
-        data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin1+i*8));
+	  for (int i = 0; i < filter_size; i++)
+	  {
+	    __m128i data, coeff, current_result;
+		data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin1+i*8));
         data = _mm_unpacklo_epi8(data, zero);
-        coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
-        current_result = _mm_madd_epi16(data, coeff);
+	    coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
+		current_result = _mm_madd_epi16(data, coeff);
         result1 = _mm_add_epi32(result1, current_result);
+			
+	    current_coeff += 8;		
+	  }
 
-        current_coeff += 8;
-      }
-
-      for (int i = 0; i < filter_size; i++) {
-        __m128i data, coeff, current_result;
+      for (int i = 0; i < filter_size; i++)
+	  {
+		__m128i data, coeff, current_result;
         data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin2+i*8));
-        data = _mm_unpacklo_epi8(data, zero);
-        coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
+	    data = _mm_unpacklo_epi8(data, zero);
+		coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
         current_result = _mm_madd_epi16(data, coeff);
-        result2 = _mm_add_epi32(result2, current_result);
+	    result2 = _mm_add_epi32(result2, current_result);
 
-        current_coeff += 8;
+		current_coeff += 8;
       }
 
-      for (int i = 0; i < filter_size; i++) {
-        __m128i data, coeff, current_result;
+      for (int i = 0; i < filter_size; i++)
+	  {
+		__m128i data, coeff, current_result;
         data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin3+i*8));
-        data = _mm_unpacklo_epi8(data, zero);
-        coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
+	    data = _mm_unpacklo_epi8(data, zero);
+		coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
         current_result = _mm_madd_epi16(data, coeff);
-        result3 = _mm_add_epi32(result3, current_result);
+	    result3 = _mm_add_epi32(result3, current_result);
 
-        current_coeff += 8;
-      }
+		current_coeff += 8;
+	  }
 
-      for (int i = 0; i < filter_size; i++) {
-        __m128i data, coeff, current_result;
+      for (int i = 0; i < filter_size; i++)
+	  {
+		__m128i data, coeff, current_result;
         data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin4+i*8));
-        data = _mm_unpacklo_epi8(data, zero);
-        coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
+		data = _mm_unpacklo_epi8(data, zero);
+	    coeff = _mm_load_si128(reinterpret_cast<const __m128i*>(current_coeff));
         current_result = _mm_madd_epi16(data, coeff);
-        result4 = _mm_add_epi32(result4, current_result);
+	    result4 = _mm_add_epi32(result4, current_result);
 
         current_coeff += 8;
-      }
+	  }
 
       __m128i result12 = _mm_hadd_epi32(result1, result2);
       __m128i result34 = _mm_hadd_epi32(result3, result4);
@@ -756,32 +789,6 @@ static void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src
 }
 
 
-/********************************************************************
-***** Declare index of new filters for Avisynth's filter engine *****
-********************************************************************/
-/*
-extern const AVSFunction Resample_filters[] = {
-  { "PointResize", "cii[src_left]f[src_top]f[src_width]f[src_height]f", FilteredResize::Create_PointResize },
-  { "BilinearResize", "cii[src_left]f[src_top]f[src_width]f[src_height]f", FilteredResize::Create_BilinearResize },
-  { "BicubicResize", "cii[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f", FilteredResize::Create_BicubicResize },
-  { "LanczosResize", "cii[src_left]f[src_top]f[src_width]f[src_height]f[taps]i", FilteredResize::Create_LanczosResize},
-  { "Lanczos4Resize", "cii[src_left]f[src_top]f[src_width]f[src_height]f", FilteredResize::Create_Lanczos4Resize},
-  { "BlackmanResize", "cii[src_left]f[src_top]f[src_width]f[src_height]f[taps]i", FilteredResize::Create_BlackmanResize},
-  { "Spline16Resize", "cii[src_left]f[src_top]f[src_width]f[src_height]f", FilteredResize::Create_Spline16Resize},
-  { "Spline36Resize", "cii[src_left]f[src_top]f[src_width]f[src_height]f", FilteredResize::Create_Spline36Resize},
-  { "Spline64Resize", "cii[src_left]f[src_top]f[src_width]f[src_height]f", FilteredResize::Create_Spline64Resize},
-  { "GaussResize", "cii[src_left]f[src_top]f[src_width]f[src_height]f[p]f", FilteredResize::Create_GaussianResize},
-  { "SincResize", "cii[src_left]f[src_top]f[src_width]f[src_height]f[taps]i", FilteredResize::Create_SincResize},*/
-  /**
-    * Resize(PClip clip, dst_width, dst_height [src_left, src_top, src_width, int src_height,] )
-    *
-    * src_left et al.   =  when these optional arguments are given, the filter acts just like
-    *                      a Crop was performed with those parameters before resizing, only faster
-   **/
-/*
-  { 0 }
-};*/
-
 
 static int num_processors()
 {
@@ -813,7 +820,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 
   if (avsp)
   {
-	pixelsize = vi.ComponentSize(); // AVS16
+	pixelsize = (uint8_t)vi.ComponentSize(); // AVS16
 	grey = vi.IsY8() || vi.IsColorSpace(VideoInfo::CS_Y16) || vi.IsColorSpace(VideoInfo::CS_Y32);	  
   }
   else
@@ -1366,7 +1373,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 
   if (avsp)
   {
-	pixelsize = vi.ComponentSize(); // AVS16
+	pixelsize = (uint8_t)vi.ComponentSize(); // AVS16
 	grey = vi.IsY8() || vi.IsColorSpace(VideoInfo::CS_Y16) || vi.IsColorSpace(VideoInfo::CS_Y32);	  
   }
   else
@@ -1808,17 +1815,17 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
   // Create pitch table
   if (src_pitch_luma != src->GetPitch()) {
     src_pitch_luma = src->GetPitch();
-    resize_v_create_pitch_table(src_pitch_table_luma, src_pitch_luma, src->GetHeight());
+    resize_v_create_pitch_table(src_pitch_table_luma, src_pitch_luma, src->GetHeight(),pixelsize);
   }
 
   if ((!grey && vi.IsPlanar()) && (src_pitch_chromaU != src->GetPitch(PLANAR_U))) {
     src_pitch_chromaU = src->GetPitch(PLANAR_U);
-    resize_v_create_pitch_table(src_pitch_table_chromaU, src_pitch_chromaU, src->GetHeight(PLANAR_U));
+    resize_v_create_pitch_table(src_pitch_table_chromaU, src_pitch_chromaU, src->GetHeight(PLANAR_U),pixelsize);
   }
 
   if ((!grey && vi.IsPlanar()) && (src_pitch_chromaV != src->GetPitch(PLANAR_V))) {
     src_pitch_chromaV = src->GetPitch(PLANAR_V);
-    resize_v_create_pitch_table(src_pitch_table_chromaV, src_pitch_chromaV, src->GetHeight(PLANAR_V));
+    resize_v_create_pitch_table(src_pitch_table_chromaV, src_pitch_chromaV, src->GetHeight(PLANAR_V),pixelsize);
   }
 
 	for(uint8_t i=0; i<threads_number; i++)
@@ -2068,10 +2075,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
     env->ThrowError("ResizeMT: Width must be greater than 0.");
   }
 
-  bool is_uint16 = (vi.pixel_type & VideoInfo::CS_Sample_Bits_16) != 0;
-  bool is_float = (vi.pixel_type & VideoInfo::CS_Sample_Bits_32) != 0;
-
-  const bool avsp=is_uint16 || is_float;
+  const bool avsp=env->FunctionExists("ConvertToFloat");
 
   const bool grey = (avsp) ? vi.IsY8() || vi.IsColorSpace(VideoInfo::CS_Y16) || vi.IsColorSpace(VideoInfo::CS_Y32) : vi.IsY8();
 
@@ -2450,45 +2454,45 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 
 AVSValue __cdecl FilteredResizeMT::Create_PointResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
                        &PointFilter(), env );
 }
 
 
 AVSValue __cdecl FilteredResizeMT::Create_BilinearResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
                        &TriangleFilter(), env );
 }
 
 
 AVSValue __cdecl FilteredResizeMT::Create_BicubicResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[5],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[9].AsInt(0), &args[5],
                        &MitchellNetravaliFilter(args[3].AsDblDef(1./3.), args[4].AsDblDef(1./3.)), env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_LanczosResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
                        &LanczosFilter(args[7].AsInt(3)), env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Lanczos4Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
                        &LanczosFilter(4), env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_BlackmanResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
                        &BlackmanFilter(args[7].AsInt(4)), env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline16Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
                        &Spline16Filter(), env );
 }
 
@@ -2500,19 +2504,19 @@ AVSValue __cdecl FilteredResizeMT::Create_Spline36Resize(AVSValue args, void*, I
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline64Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
                        &Spline64Filter(), env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_GaussianResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
                        &GaussianFilter(args[7].AsFloat(30.0f)), env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_SincResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),0, &args[3],
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
                        &SincFilter(args[7].AsInt(4)), env );
 }
 
@@ -2524,8 +2528,28 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 {
 	AVS_linkage = vectors;
 
-	env->AddFunction("Spline36ResizeMT", "c[dst_width]i[dst_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("PointResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+		FilteredResizeMT::Create_PointResize, 0);
+	env->AddFunction("BilinearResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+		FilteredResizeMT::Create_BilinearResize, 0);
+	env->AddFunction("BicubicResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+		FilteredResizeMT::Create_BicubicResize, 0);
+	env->AddFunction("LanczosResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i",
+		FilteredResizeMT::Create_LanczosResize, 0);
+	env->AddFunction("Lanczos4ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+		FilteredResizeMT::Create_Lanczos4Resize, 0);
+	env->AddFunction("BlackmanResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i",
+		FilteredResizeMT::Create_BlackmanResize, 0);
+	env->AddFunction("Spline16ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+		FilteredResizeMT::Create_Spline16Resize, 0);
+	env->AddFunction("Spline36ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
 		FilteredResizeMT::Create_Spline36Resize, 0);
+	env->AddFunction("Spline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+		FilteredResizeMT::Create_Spline64Resize, 0);
+	env->AddFunction("GaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[threads]i",
+		FilteredResizeMT::Create_GaussianResize, 0);
+	env->AddFunction("SincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i",
+		FilteredResizeMT::Create_SincResize, 0);
 
 	return "ResizeMT plugin";
 	
