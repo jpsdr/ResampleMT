@@ -998,7 +998,11 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 		{
 			thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolH,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
 			ok=ok && (thds[i]!=NULL);
-			if (ok) SetThreadAffinityMask(thds[i],ThreadMask[i]);
+			if (ok)
+			{
+				SetThreadAffinityMask(thds[i],ThreadMask[i]);
+				ResumeThread(thds[i]);
+			}
 			i++;
 		}
 		if (!ok)
@@ -1318,9 +1322,6 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
 	if (threads_number>1)
 	{
-		for(uint8_t i=0; i<threads_number; i++)
-			ResumeThread(thds[i]);
-
 		uint8_t f_proc;
 
 		f_proc=1;
@@ -1361,9 +1362,6 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
-
-		for(uint8_t i=0; i<threads_number; i++)
-			SuspendThread(thds[i]);
 	}
 	else
 	{
@@ -1424,7 +1422,6 @@ void FilteredResizeH::FreeData(void)
 		{
 			if (thds[i]!=NULL)
 			{
-				ResumeThread(thds[i]);
 				MT_Thread[i].f_process=255;
 				SetEvent(MT_Thread[i].nextJob);
 				WaitForSingleObject(thds[i],INFINITE);
@@ -1532,7 +1529,11 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 		{
 			thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolV,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
 			ok=ok && (thds[i]!=NULL);
-			if (ok) SetThreadAffinityMask(thds[i],ThreadMask[i]);
+			if (ok)
+			{
+				SetThreadAffinityMask(thds[i],ThreadMask[i]);
+				ResumeThread(thds[i]);
+			}
 			i++;
 		}
 		if (!ok)
@@ -1932,9 +1933,6 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 	if (threads_number>1)
 	{
-		for(uint8_t i=0; i<threads_number; i++)
-			ResumeThread(thds[i]);
-
 		uint8_t f_proc;
 
 		if (IsPtrAligned(srcp_Y, 16) && (src_pitch_Y & 15) == 0) f_proc=1;
@@ -1978,9 +1976,6 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
-
-		for(uint8_t i=0; i<threads_number; i++)
-			SuspendThread(thds[i]);
 	}
 	else
 	{
@@ -2095,7 +2090,6 @@ void FilteredResizeV::FreeData(void)
 		{
 			if (thds[i]!=NULL)
 			{
-				ResumeThread(thds[i]);
 				MT_Thread[i].f_process=255;
 				SetEvent(MT_Thread[i].nextJob);
 				WaitForSingleObject(thds[i],INFINITE);
