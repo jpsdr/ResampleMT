@@ -46,6 +46,13 @@
 typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int MinY, int MaxY, const int* pitch_table, const void* storage);
 typedef void (*ResamplerH)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int target_height);
 
+typedef struct _Arch_CPU
+{
+	uint8_t NbPhysCore,NbLogicCPU;
+	uint8_t NbHT[64];
+	ULONG_PTR ProcMask[64];
+} Arch_CPU;
+
 typedef struct _MT_Data_Info
 {
 	const BYTE*src1,*src2,*src3;
@@ -92,7 +99,9 @@ private:
 	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	DWORD tids[MAX_MT_THREADS];
-	uint8_t CPUs_number,threads_number;
+	Arch_CPU CPU;
+	ULONG_PTR ThreadMask[MAX_MT_THREADS];
+	uint8_t threads_number;
 	HANDLE ghMutex;
 	
 	static DWORD WINAPI StaticThreadpoolH( LPVOID lpParam );
@@ -147,7 +156,9 @@ private:
 	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	DWORD tids[MAX_MT_THREADS];
-	uint8_t CPUs_number,threads_number;
+	Arch_CPU CPU;
+	ULONG_PTR ThreadMask[MAX_MT_THREADS];
+	uint8_t threads_number;
 	HANDLE ghMutex;
 	
 	static DWORD WINAPI StaticThreadpoolV( LPVOID lpParam );

@@ -37,8 +37,9 @@
 #include "avs/config.h"
 #include "avs/alignment.h"
 
-#define VERSION "ResampleMT 1.0.0 JPSDR"
+#define VERSION "ResampleMT 1.0.2 JPSDR"
 
+#define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
 
 // Intrinsics for SSE4.1, SSSE3, SSE3, SSE2, ISSE and MMX
@@ -790,19 +791,124 @@ static void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src
 
 
 
-static int num_processors()
+// Helper function to count set bits in the processor mask.
+static uint8_t CountSetBits(ULONG_PTR bitMask)
 {
-#ifdef _DEBUG
-	return 1;
-#else
-	int pcount = 0;
-	ULONG_PTR p_aff=0, s_aff=0;
-	GetProcessAffinityMask(GetCurrentProcess(), &p_aff, &s_aff);
-	for(; p_aff != 0; p_aff>>=1) 
-		pcount += (p_aff&1);
-	return pcount;
-#endif
+    DWORD LSHIFT = sizeof(ULONG_PTR)*8 - 1;
+    uint8_t bitSetCount = 0;
+    ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;    
+    DWORD i;
+    
+    for (i = 0; i <= LSHIFT; ++i)
+    {
+        bitSetCount += ((bitMask & bitTest)?1:0);
+        bitTest/=2;
+    }
+
+    return bitSetCount;
 }
+
+
+static void Get_CPU_Info(Arch_CPU& cpu)
+{
+    bool done = false;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer=NULL;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION ptr=NULL;
+    DWORD returnLength=0;
+    uint8_t logicalProcessorCount=0;
+    uint8_t processorCoreCount=0;
+    DWORD byteOffset=0;
+
+	cpu.NbLogicCPU=0;
+	cpu.NbPhysCore=0;
+
+    while (!done)
+    {
+        BOOL rc=GetLogicalProcessorInformation(buffer, &returnLength);
+
+        if (rc==FALSE) 
+        {
+            if (GetLastError()==ERROR_INSUFFICIENT_BUFFER) 
+            {
+                myfree(buffer);
+                buffer=(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION)malloc(returnLength);
+
+                if (buffer==NULL) return;
+            } 
+            else
+			{
+				myfree(buffer);
+				return;
+			}
+        } 
+        else done=true;
+    }
+
+    ptr=buffer;
+
+    while ((byteOffset+sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION))<=returnLength) 
+    {
+        switch (ptr->Relationship) 
+        {
+			case RelationProcessorCore :
+	            // A hyperthreaded core supplies more than one logical processor.
+				cpu.NbHT[processorCoreCount]=CountSetBits(ptr->ProcessorMask);
+		        logicalProcessorCount+=cpu.NbHT[processorCoreCount];
+				cpu.ProcMask[processorCoreCount++]=ptr->ProcessorMask;
+			    break;
+			default : break;
+        }
+        byteOffset+=sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+        ptr++;
+    }
+	free(buffer);
+
+	cpu.NbPhysCore=processorCoreCount;
+	cpu.NbLogicCPU=logicalProcessorCount;
+}
+
+
+static ULONG_PTR GetCPUMask(ULONG_PTR bitMask, uint8_t CPU_Nb)
+{
+    uint8_t LSHIFT=sizeof(ULONG_PTR)*8-1;
+    uint8_t i=0,bitSetCount=0;
+    ULONG_PTR bitTest=1;    
+
+	CPU_Nb++;
+	while (i<=LSHIFT)
+	{
+		if ((bitMask & bitTest)!=0) bitSetCount++;
+		if (bitSetCount==CPU_Nb) return(bitTest);
+		else
+		{
+			i++;
+			bitTest<<=1;
+		}
+	}
+	return(0);
+}
+
+
+static void CreateThreadsMasks(Arch_CPU cpu, ULONG_PTR *TabMask,uint8_t NbThread)
+{
+	memset(TabMask,0,NbThread*sizeof(ULONG_PTR));
+
+	if ((cpu.NbLogicCPU==0) || (cpu.NbPhysCore==0)) return;
+
+	uint8_t current_thread=0;
+
+	for(uint8_t i=0; i<cpu.NbPhysCore; i++)
+	{
+		uint8_t Nb_Core_Th=NbThread/cpu.NbPhysCore+( ((NbThread%cpu.NbPhysCore)>i) ? 1:0 );
+
+		if (Nb_Core_Th>0)
+		{
+			for(uint8_t j=0; j<Nb_Core_Th; j++)
+				TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i],j%cpu.NbHT[i]);
+		}
+	}
+}
+
 
 
 
@@ -829,7 +935,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	grey = vi.IsY8();
   }  
 
-	bool ok,def_affinity;
+	bool ok;
 	int16_t i;
 
 	for (i=0; i<MAX_MT_THREADS; i++)
@@ -843,12 +949,13 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	}
 	ghMutex=NULL;
 
-	CPUs_number=(uint8_t)num_processors();
-	if (CPUs_number>MAX_MT_THREADS) CPUs_number=MAX_MT_THREADS;
+	Get_CPU_Info(CPU);
+	if ((CPU.NbLogicCPU==0) || (CPU.NbPhysCore==0))
+		env->ThrowError("ResizeMT: Error getting system CPU information !");
 
 	if (vi.height>=32)
 	{
-		if (threads==0) threads_number=CPUs_number;
+		if (threads==0) threads_number=((CPU.NbLogicCPU>MAX_MT_THREADS) ? MAX_MT_THREADS:CPU.NbLogicCPU);
 		else threads_number=(uint8_t)threads;
 	}
 	else threads_number=1;
@@ -860,8 +967,8 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	const int dst_width = vi.IsPlanar() ? target_width : vi.BytesFromPixels(target_width);
 	
 	threads_number=CreateMTData(threads_number,src_width,vi.height,dst_width,vi.height,shift_w,shift_h);
-	if (threads_number<=CPUs_number) def_affinity=true;
-	else def_affinity=false;
+
+	CreateThreadsMasks(CPU,ThreadMask,threads_number);
 
 	ghMutex=CreateMutex(NULL,FALSE,NULL);
 	if (ghMutex==NULL) env->ThrowError("ResizeMT: Unable to create Mutex !");
@@ -885,37 +992,14 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 			env->ThrowError("ResizeMT: Unable to create events !");
 		}
 
-		DWORD_PTR dwpProcessAffinityMask;
-		DWORD_PTR dwpSystemAffinityMask;
-		DWORD_PTR dwpThreadAffinityMask=1;
-
-		GetProcessAffinityMask(GetCurrentProcess(), &dwpProcessAffinityMask, &dwpSystemAffinityMask);
-
 		ok=true;
 		i=0;
 		while ((i<threads_number) && ok)
 		{
-			if (def_affinity)
-			{
-				if ((dwpProcessAffinityMask & dwpThreadAffinityMask)!=0)
-				{
-					thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolH,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
-					ok=ok && (thds[i]!=NULL);
-					if (ok)
-					{
-						SetThreadAffinityMask(thds[i],dwpThreadAffinityMask);
-						ResumeThread(thds[i]);
-					}
-					i++;
-				}
-				dwpThreadAffinityMask<<=1;
-			}
-			else
-			{
-				thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolH,&MT_Thread[i],0,&tids[i]);
-				ok=ok && (thds[i]!=NULL);
-				i++;
-			}
+			thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolH,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
+			ok=ok && (thds[i]!=NULL);
+			if (ok) SetThreadAffinityMask(thds[i],ThreadMask[i]);
+			i++;
 		}
 		if (!ok)
 		{
@@ -1234,6 +1318,9 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
 	if (threads_number>1)
 	{
+		for(uint8_t i=0; i<threads_number; i++)
+			ResumeThread(thds[i]);
+
 		uint8_t f_proc;
 
 		f_proc=1;
@@ -1274,6 +1361,9 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
+
+		for(uint8_t i=0; i<threads_number; i++)
+			SuspendThread(thds[i]);
 	}
 	else
 	{
@@ -1334,6 +1424,7 @@ void FilteredResizeH::FreeData(void)
 		{
 			if (thds[i]!=NULL)
 			{
+				ResumeThread(thds[i]);
 				MT_Thread[i].f_process=255;
 				SetEvent(MT_Thread[i].nextJob);
 				WaitForSingleObject(thds[i],INFINITE);
@@ -1368,7 +1459,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     filter_storage_luma_aligned(NULL), filter_storage_luma_unaligned(NULL),
     filter_storage_chroma_aligned(NULL), filter_storage_chroma_unaligned(NULL), threads(_threads),avsp(_avsp)
 {
-	bool ok,def_affinity;
+	bool ok;
 	int16_t i;
 
   if (avsp)
@@ -1394,12 +1485,13 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	}
 	ghMutex=NULL;
 
-	CPUs_number=(uint8_t)num_processors();
-	if (CPUs_number>MAX_MT_THREADS) CPUs_number=MAX_MT_THREADS;
+	Get_CPU_Info(CPU);
+	if ((CPU.NbLogicCPU==0) || (CPU.NbPhysCore==0))
+		env->ThrowError("ResizeMT: Error getting system CPU information !");
 
 	if (vi.height>=32)
 	{
-		if (threads==0) threads_number=CPUs_number;
+		if (threads==0) threads_number=((CPU.NbLogicCPU>MAX_MT_THREADS) ? MAX_MT_THREADS:CPU.NbLogicCPU);
 		else threads_number=(uint8_t)threads;
 	}
 	else threads_number=1;
@@ -1410,8 +1502,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	const int work_width = vi.IsPlanar() ? vi.width : vi.BytesFromPixels(vi.width);
 	
 	threads_number=CreateMTData(threads_number,work_width,vi.height,work_width,target_height,shift_w,shift_h);
-	if (threads_number<=CPUs_number) def_affinity=true;
-	else def_affinity=false;
+	CreateThreadsMasks(CPU,ThreadMask,threads_number);
 
 	ghMutex=CreateMutex(NULL,FALSE,NULL);
 	if (ghMutex==NULL) env->ThrowError("ResizeMT: Unable to create Mutex !");
@@ -1435,37 +1526,14 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 			env->ThrowError("ResizeMT: Unable to create events !");
 		}
 
-		DWORD_PTR dwpProcessAffinityMask;
-		DWORD_PTR dwpSystemAffinityMask;
-		DWORD_PTR dwpThreadAffinityMask=1;
-
-		GetProcessAffinityMask(GetCurrentProcess(), &dwpProcessAffinityMask, &dwpSystemAffinityMask);
-
 		ok=true;
 		i=0;
 		while ((i<threads_number) && ok)
 		{
-			if (def_affinity)
-			{
-				if ((dwpProcessAffinityMask & dwpThreadAffinityMask)!=0)
-				{
-					thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolV,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
-					ok=ok && (thds[i]!=NULL);
-					if (ok)
-					{
-						SetThreadAffinityMask(thds[i],dwpThreadAffinityMask);
-						ResumeThread(thds[i]);
-					}
-					i++;
-				}
-				dwpThreadAffinityMask<<=1;
-			}
-			else
-			{
-				thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolV,&MT_Thread[i],0,&tids[i]);
-				ok=ok && (thds[i]!=NULL);
-				i++;
-			}
+			thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolV,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
+			ok=ok && (thds[i]!=NULL);
+			if (ok) SetThreadAffinityMask(thds[i],ThreadMask[i]);
+			i++;
 		}
 		if (!ok)
 		{
@@ -1864,6 +1932,9 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 	if (threads_number>1)
 	{
+		for(uint8_t i=0; i<threads_number; i++)
+			ResumeThread(thds[i]);
+
 		uint8_t f_proc;
 
 		if (IsPtrAligned(srcp_Y, 16) && (src_pitch_Y & 15) == 0) f_proc=1;
@@ -1907,6 +1978,9 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
+
+		for(uint8_t i=0; i<threads_number; i++)
+			SuspendThread(thds[i]);
 	}
 	else
 	{
@@ -2021,6 +2095,7 @@ void FilteredResizeV::FreeData(void)
 		{
 			if (thds[i]!=NULL)
 			{
+				ResumeThread(thds[i]);
 				MT_Thread[i].f_process=255;
 				SetEvent(MT_Thread[i].nextJob);
 				WaitForSingleObject(thds[i],INFINITE);
