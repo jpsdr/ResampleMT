@@ -90,6 +90,7 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
+	DWORD ProcId;
 	HANDLE ghMutex;
 	
 	ThreadPoolFunction ResampleH_MT;
@@ -145,6 +146,7 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
+	DWORD ProcId;
 	HANDLE ghMutex;
 	
 	ThreadPoolFunction ResampleV_MT;

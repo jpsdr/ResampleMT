@@ -29,9 +29,6 @@
     <ClInclude Include="resample_functions.h">
       <Filter>Fichiers d%27en-tête</Filter>
     </ClInclude>
-    <ClInclude Include="DLL\ThreadPoolDLL.h">
-      <Filter>Fichiers d%27en-tête</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resample.rc">
