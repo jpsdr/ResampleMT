@@ -39,8 +39,7 @@
 #include <windows.h>
 #include "avisynth.h"
 #include "resample_functions.h"
-
-#define MAX_MT_THREADS 128
+#include "DLL\ThreadPoolDLL.h"
 
 // Resizer function pointer
 typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int MinY, int MaxY, const int* pitch_table, const void* storage);
@@ -70,13 +69,6 @@ typedef struct _MT_Data_Info
 } MT_Data_Info;
 
 
-typedef struct _MT_Data_Thread
-{
-	void *pClass;
-	uint8_t f_process,thread_Id;
-	HANDLE nextJob, jobFinished;
-} MT_Data_Thread;
-
 
 /**
   * Class to resize in the horizontal direction using a specified sampling filter
@@ -95,16 +87,14 @@ public:
   static ResamplerH GetResampler(int CPU, bool aligned, int pixelsize, ResamplingProgram* program, IScriptEnvironment* env);
 
 private:
-	HANDLE thds[MAX_MT_THREADS];
-	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
+	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
-	DWORD tids[MAX_MT_THREADS];
-	Arch_CPU CPU;
-	ULONG_PTR ThreadMask[MAX_MT_THREADS];
 	uint8_t threads_number;
 	HANDLE ghMutex;
 	
-	static DWORD WINAPI StaticThreadpoolH( LPVOID lpParam );
+	ThreadPoolFunction ResampleH_MT;
+
+	static void StaticThreadpoolH(void *ptr);
 
 	uint8_t CreateMTData(uint8_t max_threads,int32_t src_size_x,int32_t src_size_y,int32_t dst_size_x,int32_t dst_size_y, int UV_w, int UV_h);
 
@@ -152,16 +142,14 @@ public:
   static ResamplerV GetResampler(int CPU, bool aligned,int pixelsize, void*& storage, ResamplingProgram* program);
 
 private:
-	HANDLE thds[MAX_MT_THREADS];
-	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
+	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
-	DWORD tids[MAX_MT_THREADS];
-	Arch_CPU CPU;
-	ULONG_PTR ThreadMask[MAX_MT_THREADS];
 	uint8_t threads_number;
 	HANDLE ghMutex;
 	
-	static DWORD WINAPI StaticThreadpoolV( LPVOID lpParam );
+	ThreadPoolFunction ResampleV_MT;
+
+	static void StaticThreadpoolV(void *ptr);
 
 	uint8_t CreateMTData(uint8_t max_threads,int32_t src_size_x,int32_t src_size_y,int32_t dst_size_x,int32_t dst_size_y, int UV_w, int UV_h);
 

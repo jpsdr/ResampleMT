@@ -45,6 +45,8 @@
 // Intrinsics for SSE4.1, SSSE3, SSE3, SSE2, ISSE and MMX
 #include <smmintrin.h>
 
+using namespace std;
+
 /***************************************
  ********* Templated SSE Loader ********
  ***************************************/
@@ -791,127 +793,6 @@ static void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src
 
 
 
-// Helper function to count set bits in the processor mask.
-static uint8_t CountSetBits(ULONG_PTR bitMask)
-{
-    DWORD LSHIFT = sizeof(ULONG_PTR)*8 - 1;
-    uint8_t bitSetCount = 0;
-    ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;    
-    DWORD i;
-    
-    for (i = 0; i <= LSHIFT; ++i)
-    {
-        bitSetCount += ((bitMask & bitTest)?1:0);
-        bitTest/=2;
-    }
-
-    return bitSetCount;
-}
-
-
-static void Get_CPU_Info(Arch_CPU& cpu)
-{
-    bool done = false;
-    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer=NULL;
-    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION ptr=NULL;
-    DWORD returnLength=0;
-    uint8_t logicalProcessorCount=0;
-    uint8_t processorCoreCount=0;
-    DWORD byteOffset=0;
-
-	cpu.NbLogicCPU=0;
-	cpu.NbPhysCore=0;
-
-    while (!done)
-    {
-        BOOL rc=GetLogicalProcessorInformation(buffer, &returnLength);
-
-        if (rc==FALSE) 
-        {
-            if (GetLastError()==ERROR_INSUFFICIENT_BUFFER) 
-            {
-                myfree(buffer);
-                buffer=(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION)malloc(returnLength);
-
-                if (buffer==NULL) return;
-            } 
-            else
-			{
-				myfree(buffer);
-				return;
-			}
-        } 
-        else done=true;
-    }
-
-    ptr=buffer;
-
-    while ((byteOffset+sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION))<=returnLength) 
-    {
-        switch (ptr->Relationship) 
-        {
-			case RelationProcessorCore :
-	            // A hyperthreaded core supplies more than one logical processor.
-				cpu.NbHT[processorCoreCount]=CountSetBits(ptr->ProcessorMask);
-		        logicalProcessorCount+=cpu.NbHT[processorCoreCount];
-				cpu.ProcMask[processorCoreCount++]=ptr->ProcessorMask;
-			    break;
-			default : break;
-        }
-        byteOffset+=sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
-        ptr++;
-    }
-	free(buffer);
-
-	cpu.NbPhysCore=processorCoreCount;
-	cpu.NbLogicCPU=logicalProcessorCount;
-}
-
-
-static ULONG_PTR GetCPUMask(ULONG_PTR bitMask, uint8_t CPU_Nb)
-{
-    uint8_t LSHIFT=sizeof(ULONG_PTR)*8-1;
-    uint8_t i=0,bitSetCount=0;
-    ULONG_PTR bitTest=1;    
-
-	CPU_Nb++;
-	while (i<=LSHIFT)
-	{
-		if ((bitMask & bitTest)!=0) bitSetCount++;
-		if (bitSetCount==CPU_Nb) return(bitTest);
-		else
-		{
-			i++;
-			bitTest<<=1;
-		}
-	}
-	return(0);
-}
-
-
-static void CreateThreadsMasks(Arch_CPU cpu, ULONG_PTR *TabMask,uint8_t NbThread)
-{
-	memset(TabMask,0,NbThread*sizeof(ULONG_PTR));
-
-	if ((cpu.NbLogicCPU==0) || (cpu.NbPhysCore==0)) return;
-
-	uint8_t current_thread=0;
-
-	for(uint8_t i=0; i<cpu.NbPhysCore; i++)
-	{
-		uint8_t Nb_Core_Th=NbThread/cpu.NbPhysCore+( ((NbThread%cpu.NbPhysCore)>i) ? 1:0 );
-
-		if (Nb_Core_Th>0)
-		{
-			for(uint8_t j=0; j<Nb_Core_Th; j++)
-				TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i],j%cpu.NbHT[i]);
-		}
-	}
-}
-
-
-
-
 FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double subrange_width,
                                   int target_width, int _threads, bool _avsp, ResamplingFunction* func, IScriptEnvironment* env )
   : GenericVideoFilter(_child),
@@ -935,28 +816,28 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	grey = vi.IsY8();
   }  
 
-	bool ok;
 	int16_t i;
+
+	ResampleH_MT=StaticThreadpoolH;
 
 	for (i=0; i<MAX_MT_THREADS; i++)
 	{
-		MT_Thread[i].pClass=NULL;
+		MT_Thread[i].pClass=this;
 		MT_Thread[i].f_process=0;
 		MT_Thread[i].thread_Id=(uint8_t)i;
-		MT_Thread[i].jobFinished=NULL;
-		MT_Thread[i].nextJob=NULL;
-		thds[i]=NULL;
+		MT_Thread[i].pFunc=ResampleH_MT;
 	}
+
 	ghMutex=NULL;
 
-	Get_CPU_Info(CPU);
-	if ((CPU.NbLogicCPU==0) || (CPU.NbPhysCore==0))
-		env->ThrowError("ResizeMT: Error getting system CPU information !");
+	if (!ThreadPoolDLL::ThreadPoolInterface::GetThreadPoolStatus())
+		env->ThrowError("ResizeMT: Error with the TheadPool DLL status !");
 
 	if (vi.height>=32)
 	{
-		if (threads==0) threads_number=((CPU.NbLogicCPU>MAX_MT_THREADS) ? MAX_MT_THREADS:CPU.NbLogicCPU);
-		else threads_number=(uint8_t)threads;
+		threads_number=ThreadPoolDLL::ThreadPoolInterface::GetThreadNumber(threads);
+		if (threads_number==0)
+			env->ThrowError("ResizeMT: Error with the TheadPool DLL while getting CPU info !");
 	}
 	else threads_number=1;
 
@@ -968,49 +849,15 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	
 	threads_number=CreateMTData(threads_number,src_width,vi.height,dst_width,vi.height,shift_w,shift_h);
 
-	CreateThreadsMasks(CPU,ThreadMask,threads_number);
-
 	ghMutex=CreateMutex(NULL,FALSE,NULL);
 	if (ghMutex==NULL) env->ThrowError("ResizeMT: Unable to create Mutex !");
 
-	if (threads_number>1)
+	if (!ThreadPoolDLL::ThreadPoolInterface::AllocateThreads(threads_number))
 	{
-		ok=true;
-		i=0;
-		while ((i<threads_number) && ok)
-		{
-			MT_Thread[i].pClass=this;
-			MT_Thread[i].f_process=0;
-			MT_Thread[i].jobFinished=CreateEvent(NULL,TRUE,TRUE,NULL);
-			MT_Thread[i].nextJob=CreateEvent(NULL,TRUE,FALSE,NULL);
-			ok=ok && ((MT_Thread[i].jobFinished!=NULL) && (MT_Thread[i].nextJob!=NULL));
-			i++;
-		}
-		if (!ok)
-		{
-			FreeData();
-			env->ThrowError("ResizeMT: Unable to create events !");
-		}
+		FreeData();
+		env->ThrowError("ResizeMT: Error with the TheadPool DLL while allocating threadpool !");
+	}
 
-		ok=true;
-		i=0;
-		while ((i<threads_number) && ok)
-		{
-			thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolH,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
-			ok=ok && (thds[i]!=NULL);
-			if (ok)
-			{
-				SetThreadAffinityMask(thds[i],ThreadMask[i]);
-				ResumeThread(thds[i]);
-			}
-			i++;
-		}
-		if (!ok)
-		{
-			FreeData();
-			env->ThrowError("ResizeMT: Unable to create threads pool !");
-		}
-	}  
   
   // Main resampling program
   resampling_program_luma = func->GetResamplingProgram(vi.width, subrange_left, subrange_width, target_width, env);
@@ -1250,27 +1097,20 @@ void FilteredResizeH::ResamplerVChromaMT(uint8_t thread_num)
 }
 
 
-DWORD WINAPI FilteredResizeH::StaticThreadpoolH( LPVOID lpParam )
+void FilteredResizeH::StaticThreadpoolH(void *ptr)
 {
-	const MT_Data_Thread *data=(const MT_Data_Thread *)lpParam;
+	const Public_MT_Data_Thread *data=(const Public_MT_Data_Thread *)ptr;
 	FilteredResizeH *ptrClass=(FilteredResizeH *)data->pClass;
-	
-	while (true)
+
+	switch(data->f_process)
 	{
-		WaitForSingleObject(data->nextJob,INFINITE);
-		switch(data->f_process)
-		{
-			case 1 : ptrClass->ResamplerLumaMT(data->thread_Id);
-				break;
-			case 2 : ptrClass->ResamplerUChromaMT(data->thread_Id);
-				break;
-			case 3 : ptrClass->ResamplerVChromaMT(data->thread_Id);
-				break;
-			case 255 : return(0); break;
-			default : ;
-		}
-		ResetEvent(data->nextJob);
-		SetEvent(data->jobFinished);
+		case 1 : ptrClass->ResamplerLumaMT(data->thread_Id);
+			break;
+		case 2 : ptrClass->ResamplerUChromaMT(data->thread_Id);
+			break;
+		case 3 : ptrClass->ResamplerVChromaMT(data->thread_Id);
+			break;
+		default : ;
 	}
 }
 
@@ -1297,8 +1137,13 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
 
   WaitForSingleObject(ghMutex,INFINITE);
+
+  uint8_t Current_Threads=threads_number;
+  DWORD pId=GetCurrentProcessId();
+
+  if (!ThreadPoolDLL::ThreadPoolInterface::RequestThreadPool(pId,threads_number,MT_Thread)) Current_Threads=1;
   
-	for(uint8_t i=0; i<threads_number; i++)
+	for(uint8_t i=0; i<Current_Threads; i++)
 	{
 		MT_Data[i].src1=srcp_Y+(MT_Data[i].src_Y_h_min*src_pitch_Y);
 		MT_Data[i].src2=srcp_U+(MT_Data[i].src_UV_h_min*src_pitch_U);
@@ -1319,49 +1164,36 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		MT_Data[i].filter_storage_chromaV=filter_storage_chroma;
 	}
 
-
-	if (threads_number>1)
+	if (Current_Threads>1)
 	{
 		uint8_t f_proc;
 
 		f_proc=1;
-
 		for(uint8_t i=0; i<threads_number; i++)
-		{
 			MT_Thread[i].f_process=f_proc;
-			ResetEvent(MT_Thread[i].jobFinished);
-			SetEvent(MT_Thread[i].nextJob);
-		}
-		for(uint8_t i=0; i<threads_number; i++)
-			WaitForSingleObject(MT_Thread[i].jobFinished,INFINITE);
+		ThreadPoolDLL::ThreadPoolInterface::StartThreads(pId);
+		ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(pId);
 
 		if (!grey && vi.IsPlanar())
 		{
 			f_proc=2;
-
 			for(uint8_t i=0; i<threads_number; i++)
-			{
 				MT_Thread[i].f_process=f_proc;
-				ResetEvent(MT_Thread[i].jobFinished);
-				SetEvent(MT_Thread[i].nextJob);
-			}
-			for(uint8_t i=0; i<threads_number; i++)
-				WaitForSingleObject(MT_Thread[i].jobFinished,INFINITE);
+			ThreadPoolDLL::ThreadPoolInterface::StartThreads(pId);
+			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(pId);
 
 			f_proc=3;
-
 			for(uint8_t i=0; i<threads_number; i++)
-			{
 				MT_Thread[i].f_process=f_proc;
-				ResetEvent(MT_Thread[i].jobFinished);
-				SetEvent(MT_Thread[i].nextJob);
-			}
-			for(uint8_t i=0; i<threads_number; i++)
-				WaitForSingleObject(MT_Thread[i].jobFinished,INFINITE);
+			ThreadPoolDLL::ThreadPoolInterface::StartThreads(pId);
+			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(pId);
+
 		}
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
+
+		ThreadPoolDLL::ThreadPoolInterface::ReleaseThreadPool(pId);
 	}
 	else
 	{
@@ -1408,33 +1240,13 @@ ResamplerH FilteredResizeH::GetResampler(int CPU, bool aligned, int pixelsize, R
 
 void FilteredResizeH::FreeData(void) 
 {
-	int16_t i;
-
   if (resampling_program_luma!=NULL)   { delete resampling_program_luma; }
   if (resampling_program_chroma!=NULL) { delete resampling_program_chroma; }
 	
   myalignedfree(filter_storage_luma);
   myalignedfree(filter_storage_chroma);
 
-	if (threads_number>1)
-	{
-		for (i=threads_number-1; i>=0; i--)
-		{
-			if (thds[i]!=NULL)
-			{
-				MT_Thread[i].f_process=255;
-				SetEvent(MT_Thread[i].nextJob);
-				WaitForSingleObject(thds[i],INFINITE);
-				myCloseHandle(thds[i]);
-			}
-		}
-		for (i=threads_number-1; i>=0; i--)
-		{
-			myCloseHandle(MT_Thread[i].nextJob);
-			myCloseHandle(MT_Thread[i].jobFinished);
-		}
-	}
-	myCloseHandle(ghMutex);
+  myCloseHandle(ghMutex);
 }
 
 FilteredResizeH::~FilteredResizeH(void)
@@ -1456,7 +1268,6 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     filter_storage_luma_aligned(NULL), filter_storage_luma_unaligned(NULL),
     filter_storage_chroma_aligned(NULL), filter_storage_chroma_unaligned(NULL), threads(_threads),avsp(_avsp)
 {
-	bool ok;
 	int16_t i;
 
   if (avsp)
@@ -1470,26 +1281,25 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	grey = vi.IsY8();
   }  
 	
+  ResampleV_MT=StaticThreadpoolV;
 	
 	for (i=0; i<MAX_MT_THREADS; i++)
 	{
-		MT_Thread[i].pClass=NULL;
+		MT_Thread[i].pClass=this;
 		MT_Thread[i].f_process=0;
 		MT_Thread[i].thread_Id=(uint8_t)i;
-		MT_Thread[i].jobFinished=NULL;
-		MT_Thread[i].nextJob=NULL;
-		thds[i]=NULL;
+		MT_Thread[i].pFunc=ResampleV_MT;
 	}
 	ghMutex=NULL;
 
-	Get_CPU_Info(CPU);
-	if ((CPU.NbLogicCPU==0) || (CPU.NbPhysCore==0))
-		env->ThrowError("ResizeMT: Error getting system CPU information !");
+	if (!ThreadPoolDLL::ThreadPoolInterface::GetThreadPoolStatus())
+		env->ThrowError("ResizeMT: Error with the TheadPool DLL status !");
 
 	if (vi.height>=32)
 	{
-		if (threads==0) threads_number=((CPU.NbLogicCPU>MAX_MT_THREADS) ? MAX_MT_THREADS:CPU.NbLogicCPU);
-		else threads_number=(uint8_t)threads;
+		threads_number=ThreadPoolDLL::ThreadPoolInterface::GetThreadNumber(threads);
+		if (threads_number==0)
+			env->ThrowError("ResizeMT: Error with the TheadPool DLL while getting CPU info !");
 	}
 	else threads_number=1;
 
@@ -1499,48 +1309,14 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	const int work_width = vi.IsPlanar() ? vi.width : vi.BytesFromPixels(vi.width);
 	
 	threads_number=CreateMTData(threads_number,work_width,vi.height,work_width,target_height,shift_w,shift_h);
-	CreateThreadsMasks(CPU,ThreadMask,threads_number);
 
 	ghMutex=CreateMutex(NULL,FALSE,NULL);
 	if (ghMutex==NULL) env->ThrowError("ResizeMT: Unable to create Mutex !");
 
-	if (threads_number>1)
+	if (!ThreadPoolDLL::ThreadPoolInterface::AllocateThreads(threads_number))
 	{
-		ok=true;
-		i=0;
-		while ((i<threads_number) && ok)
-		{
-			MT_Thread[i].pClass=this;
-			MT_Thread[i].f_process=0;
-			MT_Thread[i].jobFinished=CreateEvent(NULL,TRUE,TRUE,NULL);
-			MT_Thread[i].nextJob=CreateEvent(NULL,TRUE,FALSE,NULL);
-			ok=ok && ((MT_Thread[i].jobFinished!=NULL) && (MT_Thread[i].nextJob!=NULL));
-			i++;
-		}
-		if (!ok)
-		{
-			FreeData();
-			env->ThrowError("ResizeMT: Unable to create events !");
-		}
-
-		ok=true;
-		i=0;
-		while ((i<threads_number) && ok)
-		{
-			thds[i]=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)StaticThreadpoolV,&MT_Thread[i],CREATE_SUSPENDED,&tids[i]);
-			ok=ok && (thds[i]!=NULL);
-			if (ok)
-			{
-				SetThreadAffinityMask(thds[i],ThreadMask[i]);
-				ResumeThread(thds[i]);
-			}
-			i++;
-		}
-		if (!ok)
-		{
-			FreeData();
-			env->ThrowError("ResizeMT: Unable to create threads pool !");
-		}
+		FreeData();
+		env->ThrowError("ResizeMT: Error with the TheadPool DLL while allocating threadpool !");
 	}
 
   if (vi.IsRGB())
@@ -1828,33 +1604,26 @@ void FilteredResizeV::ResamplerVChromaUnalignedMT(uint8_t thread_num)
 }
 
 
-DWORD WINAPI FilteredResizeV::StaticThreadpoolV( LPVOID lpParam )
+void FilteredResizeV::StaticThreadpoolV(void *ptr)
 {
-	const MT_Data_Thread *data=(const MT_Data_Thread *)lpParam;
+	const Public_MT_Data_Thread *data=(const Public_MT_Data_Thread *)ptr;
 	FilteredResizeV *ptrClass=(FilteredResizeV *)data->pClass;
 	
-	while (true)
+	switch(data->f_process)
 	{
-		WaitForSingleObject(data->nextJob,INFINITE);
-		switch(data->f_process)
-		{
-			case 1 : ptrClass->ResamplerLumaAlignedMT(data->thread_Id);
-				break;
-			case 2 : ptrClass->ResamplerLumaUnalignedMT(data->thread_Id);
-				break;
-			case 3 : ptrClass->ResamplerUChromaAlignedMT(data->thread_Id);
-				break;
-			case 4 : ptrClass->ResamplerUChromaUnalignedMT(data->thread_Id);
-				break;
-			case 5 : ptrClass->ResamplerVChromaAlignedMT(data->thread_Id);
-				break;
-			case 6 : ptrClass->ResamplerVChromaUnalignedMT(data->thread_Id);
-				break;
-			case 255 : return(0); break;
-			default : ;
-		}
-		ResetEvent(data->nextJob);
-		SetEvent(data->jobFinished);
+		case 1 : ptrClass->ResamplerLumaAlignedMT(data->thread_Id);
+			break;
+		case 2 : ptrClass->ResamplerLumaUnalignedMT(data->thread_Id);
+			break;
+		case 3 : ptrClass->ResamplerUChromaAlignedMT(data->thread_Id);
+			break;
+		case 4 : ptrClass->ResamplerUChromaUnalignedMT(data->thread_Id);
+			break;
+		case 5 : ptrClass->ResamplerVChromaAlignedMT(data->thread_Id);
+			break;
+		case 6 : ptrClass->ResamplerVChromaUnalignedMT(data->thread_Id);
+			break;
+		default : ;
 	}
 }
 
@@ -1897,7 +1666,12 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
     resize_v_create_pitch_table(src_pitch_table_chromaV, src_pitch_chromaV, src->GetHeight(PLANAR_V),pixelsize);
   }
 
-	for(uint8_t i=0; i<threads_number; i++)
+  uint8_t Current_Threads=threads_number;
+  DWORD pId=GetCurrentProcessId();
+
+  if (!ThreadPoolDLL::ThreadPoolInterface::RequestThreadPool(pId,threads_number,MT_Thread)) Current_Threads=1;
+
+	for(uint8_t i=0; i<Current_Threads; i++)
 	{
 		MT_Data[i].src1=srcp_Y;
 		MT_Data[i].src2=srcp_U;
@@ -1931,7 +1705,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 	}
 
 
-	if (threads_number>1)
+	if (Current_Threads>1)
 	{
 		uint8_t f_proc;
 
@@ -1939,13 +1713,9 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 		else f_proc=2;
 
 		for(uint8_t i=0; i<threads_number; i++)
-		{
 			MT_Thread[i].f_process=f_proc;
-			ResetEvent(MT_Thread[i].jobFinished);
-			SetEvent(MT_Thread[i].nextJob);
-		}
-		for(uint8_t i=0; i<threads_number; i++)
-			WaitForSingleObject(MT_Thread[i].jobFinished,INFINITE);
+		ThreadPoolDLL::ThreadPoolInterface::StartThreads(pId);
+		ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(pId);
 
 		if (!vi.IsY8() && vi.IsPlanar())
 		{
@@ -1953,29 +1723,23 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 			else f_proc=4;
 
 			for(uint8_t i=0; i<threads_number; i++)
-			{
 				MT_Thread[i].f_process=f_proc;
-				ResetEvent(MT_Thread[i].jobFinished);
-				SetEvent(MT_Thread[i].nextJob);
-			}
-			for(uint8_t i=0; i<threads_number; i++)
-				WaitForSingleObject(MT_Thread[i].jobFinished,INFINITE);
+			ThreadPoolDLL::ThreadPoolInterface::StartThreads(pId);
+			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(pId);
 
 			if (IsPtrAligned(srcp_V, 16) && (src_pitch_V & 15) == 0) f_proc=5;
 			else f_proc=6;
 
 			for(uint8_t i=0; i<threads_number; i++)
-			{
 				MT_Thread[i].f_process=f_proc;
-				ResetEvent(MT_Thread[i].jobFinished);
-				SetEvent(MT_Thread[i].nextJob);
-			}
-			for(uint8_t i=0; i<threads_number; i++)
-				WaitForSingleObject(MT_Thread[i].jobFinished,INFINITE);
+			ThreadPoolDLL::ThreadPoolInterface::StartThreads(pId);
+			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(pId);
 		}
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
+
+		ThreadPoolDLL::ThreadPoolInterface::ReleaseThreadPool(pId);
 	}
 	else
 	{
@@ -2071,8 +1835,6 @@ ResamplerV FilteredResizeV::GetResampler(int CPU, bool aligned,int pixelsize, vo
 
 void FilteredResizeV::FreeData(void) 
 {
-	int16_t i;
-
   if (resampling_program_luma!=NULL)   { delete resampling_program_luma; }
   if (resampling_program_chroma!=NULL) { delete resampling_program_chroma; }
   if (src_pitch_table_luma!=NULL)    { delete[] src_pitch_table_luma; }
@@ -2084,25 +1846,7 @@ void FilteredResizeV::FreeData(void)
   myalignedfree(filter_storage_chroma_aligned);
   myalignedfree(filter_storage_chroma_unaligned);
 
-	if (threads_number>1)
-	{
-		for (i=threads_number-1; i>=0; i--)
-		{
-			if (thds[i]!=NULL)
-			{
-				MT_Thread[i].f_process=255;
-				SetEvent(MT_Thread[i].nextJob);
-				WaitForSingleObject(thds[i],INFINITE);
-				myCloseHandle(thds[i]);
-			}
-		}
-		for (i=threads_number-1; i>=0; i--)
-		{
-			myCloseHandle(MT_Thread[i].nextJob);
-			myCloseHandle(MT_Thread[i].jobFinished);
-		}
-	}
-	myCloseHandle(ghMutex);
+  myCloseHandle(ghMutex);
 }
 
 
