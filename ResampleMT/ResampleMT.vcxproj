@@ -165,10 +165,12 @@
   <ItemGroup>
     <ClCompile Include="resample.cpp" />
     <ClCompile Include="resample_functions.cpp" />
+    <ClCompile Include="ThreadPool.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resample.h" />
     <ClInclude Include="resample_functions.h" />
+    <ClInclude Include="ThreadPool.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resample.rc" />

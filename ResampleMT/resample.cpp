@@ -37,7 +37,9 @@
 #include "avs/config.h"
 #include "avs/alignment.h"
 
-#define VERSION "ResampleMT 1.0.2 JPSDR"
+extern ThreadPool local_pool;
+
+#define VERSION "ResampleMT 1.0.3 JPSDR"
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
@@ -45,7 +47,6 @@
 // Intrinsics for SSE4.1, SSSE3, SSE3, SSE2, ISSE and MMX
 #include <smmintrin.h>
 
-using namespace std;
 
 /***************************************
  ********* Templated SSE Loader ********
@@ -832,12 +833,11 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 
 	ghMutex=NULL;
 
-	if (!ThreadPoolDLL::ThreadPoolInterface::GetThreadPoolStatus())
-		env->ThrowError("ResizeHMT: Error with the TheadPool DLL status !");
+	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeHMT: Error with the TheadPool DLL status !");
 
 	if (vi.height>=32)
 	{
-		threads_number=ThreadPoolDLL::ThreadPoolInterface::GetThreadNumber(threads);
+		threads_number=local_pool.GetThreadNumber(threads);
 		if (threads_number==0)
 			env->ThrowError("ResizeHMT: Error with the TheadPool DLL while getting CPU info !");
 	}
@@ -854,7 +854,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	ghMutex=CreateMutex(NULL,FALSE,NULL);
 	if (ghMutex==NULL) env->ThrowError("ResizeHMT: Unable to create Mutex !");
 
-	if (!ThreadPoolDLL::ThreadPoolInterface::AllocateThreads(ProcId,threads_number))
+	if (!local_pool.AllocateThreads(ProcId,threads_number))
 	{
 		FreeData();
 		env->ThrowError("ResizeHMT: Error with the TheadPool DLL while allocating threadpool !");
@@ -1142,7 +1142,10 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
   uint8_t Current_Threads=threads_number;
 
-  if (!ThreadPoolDLL::ThreadPoolInterface::RequestThreadPool(ProcId,threads_number,MT_Thread)) Current_Threads=1;
+  if (threads_number>1)
+  {
+	if (!local_pool.RequestThreadPool(ProcId,threads_number,MT_Thread)) Current_Threads=1;
+  }
   
 	for(uint8_t i=0; i<Current_Threads; i++)
 	{
@@ -1172,29 +1175,29 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		f_proc=1;
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=f_proc;
-		ThreadPoolDLL::ThreadPoolInterface::StartThreads(ProcId);
-		ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(ProcId);
+		local_pool.StartThreads(ProcId);
+		local_pool.WaitThreadsEnd(ProcId);
 
 		if (!grey && vi.IsPlanar())
 		{
 			f_proc=2;
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			ThreadPoolDLL::ThreadPoolInterface::StartThreads(ProcId);
-			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(ProcId);
+			local_pool.StartThreads(ProcId);
+			local_pool.WaitThreadsEnd(ProcId);
 
 			f_proc=3;
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			ThreadPoolDLL::ThreadPoolInterface::StartThreads(ProcId);
-			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(ProcId);
+			local_pool.StartThreads(ProcId);
+			local_pool.WaitThreadsEnd(ProcId);
 
 		}
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
 
-		ThreadPoolDLL::ThreadPoolInterface::ReleaseThreadPool(ProcId);
+		local_pool.ReleaseThreadPool(ProcId);
 	}
 	else
 	{
@@ -1252,7 +1255,7 @@ void FilteredResizeH::FreeData(void)
 
 FilteredResizeH::~FilteredResizeH(void)
 {
-	ThreadPoolDLL::ThreadPoolInterface::DeAllocateThreads(ProcId);
+	local_pool.DeAllocateThreads(ProcId);
 	FreeData();
 }
 
@@ -1296,12 +1299,11 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 
 	ProcId=GetCurrentProcessId();
 
-	if (!ThreadPoolDLL::ThreadPoolInterface::GetThreadPoolStatus())
-		env->ThrowError("ResizeVMT: Error with the TheadPool DLL status !");
+	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeVMT: Error with the TheadPool DLL status !");
 
 	if (vi.height>=32)
 	{
-		threads_number=ThreadPoolDLL::ThreadPoolInterface::GetThreadNumber(threads);
+		threads_number=local_pool.GetThreadNumber(threads);
 		if (threads_number==0)
 			env->ThrowError("ResizeVMT: Error with the TheadPool DLL while getting CPU info !");
 	}
@@ -1317,7 +1319,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	ghMutex=CreateMutex(NULL,FALSE,NULL);
 	if (ghMutex==NULL) env->ThrowError("ResizeVMT: Unable to create Mutex !");
 
-	if (!ThreadPoolDLL::ThreadPoolInterface::AllocateThreads(ProcId,threads_number))
+	if (!local_pool.AllocateThreads(ProcId,threads_number))
 	{
 		FreeData();
 		env->ThrowError("ResizeVMT: Error with the TheadPool DLL while allocating threadpool !");
@@ -1672,7 +1674,10 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
   uint8_t Current_Threads=threads_number;
 
-  if (!ThreadPoolDLL::ThreadPoolInterface::RequestThreadPool(ProcId,threads_number,MT_Thread)) Current_Threads=1;
+  if (threads_number>1)
+  {
+	if (!local_pool.RequestThreadPool(ProcId,threads_number,MT_Thread)) Current_Threads=1;
+  }
 
 	for(uint8_t i=0; i<Current_Threads; i++)
 	{
@@ -1717,8 +1722,8 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=f_proc;
-		ThreadPoolDLL::ThreadPoolInterface::StartThreads(ProcId);
-		ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(ProcId);
+		local_pool.StartThreads(ProcId);
+		local_pool.WaitThreadsEnd(ProcId);
 
 		if (!vi.IsY8() && vi.IsPlanar())
 		{
@@ -1727,22 +1732,22 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			ThreadPoolDLL::ThreadPoolInterface::StartThreads(ProcId);
-			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(ProcId);
+			local_pool.StartThreads(ProcId);
+			local_pool.WaitThreadsEnd(ProcId);
 
 			if (IsPtrAligned(srcp_V, 16) && (src_pitch_V & 15) == 0) f_proc=5;
 			else f_proc=6;
 
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			ThreadPoolDLL::ThreadPoolInterface::StartThreads(ProcId);
-			ThreadPoolDLL::ThreadPoolInterface::WaitThreadsEnd(ProcId);
+			local_pool.StartThreads(ProcId);
+			local_pool.WaitThreadsEnd(ProcId);
 		}
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
 
-		ThreadPoolDLL::ThreadPoolInterface::ReleaseThreadPool(ProcId);
+		local_pool.ReleaseThreadPool(ProcId);
 	}
 	else
 	{
@@ -1855,7 +1860,7 @@ void FilteredResizeV::FreeData(void)
 
 FilteredResizeV::~FilteredResizeV(void)
 {
-	ThreadPoolDLL::ThreadPoolInterface::DeAllocateThreads(ProcId);
+	local_pool.DeAllocateThreads(ProcId);
 	FreeData();
 }
 
