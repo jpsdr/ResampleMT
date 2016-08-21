@@ -39,7 +39,7 @@
 
 extern ThreadPool local_pool;
 
-#define VERSION "ResampleMT 1.0.3 JPSDR"
+#define VERSION "ResampleMT 1.1.0 JPSDR"
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
