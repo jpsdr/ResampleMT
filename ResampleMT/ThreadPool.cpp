@@ -3,7 +3,7 @@
 
 #include "ThreadPool.h"
 
-#define VERSION "ThreadPool 1.0.0"
+#define VERSION "ThreadPool 1.0.1"
 
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
@@ -11,8 +11,6 @@
 
 //#define MAX_USERS 500
 
-
-ThreadPool local_pool;
 
 
 // Helper function to count set bits in the processor mask.
@@ -113,7 +111,7 @@ static ULONG_PTR GetCPUMask(ULONG_PTR bitMask, uint8_t CPU_Nb)
 }
 
 
-static void CreateThreadsMasks(Arch_CPU cpu, ULONG_PTR *TabMask,uint8_t NbThread)
+static void CreateThreadsMasks(Arch_CPU cpu, ULONG_PTR *TabMask,uint8_t NbThread,uint8_t offset)
 {
 	memset(TabMask,0,NbThread*sizeof(ULONG_PTR));
 
@@ -127,8 +125,10 @@ static void CreateThreadsMasks(Arch_CPU cpu, ULONG_PTR *TabMask,uint8_t NbThread
 
 		if (Nb_Core_Th>0)
 		{
+			const uint8_t offs=(cpu.NbHT[i]>offset) ? offset:cpu.NbHT[i]-1;
+
 			for(uint8_t j=0; j<Nb_Core_Th; j++)
-				TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i],j%cpu.NbHT[i]);
+				TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i],(j+offs)%cpu.NbHT[i]);
 		}
 	}
 }
@@ -159,6 +159,15 @@ DWORD WINAPI ThreadPool::StaticThreadpool(LPVOID lpParam )
 }
 
 
+ThreadPool& ThreadPool::Init(uint8_t num)
+{
+	static ThreadPool Pool[MAX_THREAD_POOL];
+
+	if (num>=MAX_THREAD_POOL) num=0;
+	return(Pool[num]);
+}
+
+
 ThreadPool::ThreadPool(void):Status_Ok(true)
 {
 	int16_t i;
@@ -173,7 +182,7 @@ ThreadPool::ThreadPool(void):Status_Ok(true)
 		thds[i]=NULL;
 	}
 //	memset(TabId,0,MAX_USERS*sizeof(DWORD));
-	ghMutex=NULL;
+	CSectionOk=FALSE;
 	JobsEnded=NULL;
 	ThreadPoolFree=NULL;
 	TotalThreadsRequested=0;
@@ -190,8 +199,8 @@ ThreadPool::ThreadPool(void):Status_Ok(true)
 		return;
 	}
 
-	ghMutex=CreateMutex(NULL,FALSE,NULL);
-	if (ghMutex==NULL)
+	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
+	if (CSectionOk==FALSE)
 	{
 		Status_Ok=false;
 		return;
@@ -223,8 +232,6 @@ ThreadPool::~ThreadPool(void)
 
 void ThreadPool::FreeThreadPool(void) 
 {
-	if (!Status_Ok) return;
-
 	int16_t i;
 
 	for (i=TotalThreadsRequested-1; i>=0; i--)
@@ -254,30 +261,34 @@ void ThreadPool::FreeThreadPool(void)
 
 void ThreadPool::FreeData(void) 
 {
-	if (!Status_Ok) return;
-
 	myCloseHandle(ThreadPoolFree);
 	myCloseHandle(JobsEnded);
-	myCloseHandle(ghMutex);
+	if (CSectionOk==TRUE)
+	{
+		DeleteCriticalSection(&CriticalSection);
+		CSectionOk=FALSE;
+	}
 }
 
 
-uint8_t ThreadPool::GetThreadNumber(uint8_t thread_number)
+uint8_t ThreadPool::GetThreadNumber(uint8_t thread_number,bool logical)
 {
-	if (thread_number==0) return((CPU.NbLogicCPU>MAX_MT_THREADS) ? MAX_MT_THREADS:CPU.NbLogicCPU);
+	const uint8_t nCPU=(logical) ? CPU.NbLogicCPU:CPU.NbPhysCore;
+
+	if (thread_number==0) return((nCPU>MAX_MT_THREADS) ? MAX_MT_THREADS:nCPU);
 	else return(thread_number);
 }
 
 
-bool ThreadPool::AllocateThreads(DWORD pId,uint8_t thread_number)
+bool ThreadPool::AllocateThreads(DWORD pId,uint8_t thread_number,uint8_t offset)
 {
 	if (!Status_Ok) return(false);
 
-	WaitForSingleObject(ghMutex,INFINITE);
+	EnterCriticalSection(&CriticalSection);
 
 	if (thread_number==0)
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
@@ -301,15 +312,15 @@ bool ThreadPool::AllocateThreads(DWORD pId,uint8_t thread_number)
 		TotalThreadsRequested=thread_number;
 		while (JobsRunning)
 		{
-			ReleaseMutex(ghMutex);
+			LeaveCriticalSection(&CriticalSection);
 			WaitForSingleObject(JobsEnded,INFINITE);
-			WaitForSingleObject(ghMutex,INFINITE);
+			EnterCriticalSection(&CriticalSection);
 		}
-		CreateThreadPool();
+		CreateThreadPool(offset);
 		if (!Status_Ok) return(false);
 	}
 
-	ReleaseMutex(ghMutex);
+	LeaveCriticalSection(&CriticalSection);
 
 	return(true);
 }
@@ -319,11 +330,11 @@ bool ThreadPool::DeAllocateThreads(DWORD pId)
 {
 	if (!Status_Ok) return(false);
 
-	WaitForSingleObject(ghMutex,INFINITE);
+	EnterCriticalSection(&CriticalSection);
 
 	if (NbreUsers==0)
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(true);
 	}
 
@@ -346,14 +357,14 @@ bool ThreadPool::DeAllocateThreads(DWORD pId)
 
 	if (NbreUsers==0) FreeThreadPool();
 
-	ReleaseMutex(ghMutex);
+	LeaveCriticalSection(&CriticalSection);
 
 	return(true);
 }
 
 
 
-void ThreadPool::CreateThreadPool(void)
+void ThreadPool::CreateThreadPool(uint8_t offset)
 {
 	int16_t i;
 
@@ -363,7 +374,7 @@ void ThreadPool::CreateThreadPool(void)
 			SuspendThread(thds[i]);
 	}
 
-	CreateThreadsMasks(CPU,ThreadMask,TotalThreadsRequested);
+	CreateThreadsMasks(CPU,ThreadMask,TotalThreadsRequested,offset);
 
 	for(i=0; i<CurrentThreadsAllocated; i++)
 	{
@@ -382,7 +393,7 @@ void ThreadPool::CreateThreadPool(void)
 	if (!Status_Ok)
 	{
 		FreeThreadPool();
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		FreeData();
 		return;
 	}
@@ -402,7 +413,7 @@ void ThreadPool::CreateThreadPool(void)
 	if (!Status_Ok)
 	{
 		FreeThreadPool();
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		FreeData();
 		return;
 	}
@@ -415,19 +426,19 @@ bool ThreadPool::RequestThreadPool(DWORD pId,uint8_t thread_number,Public_MT_Dat
 {
 	if (!Status_Ok) return(false);
 
-	WaitForSingleObject(ghMutex,INFINITE);
+	EnterCriticalSection(&CriticalSection);
 
 	if (thread_number>CurrentThreadsAllocated)
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
 	while (ThreadPoolRequested)
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		WaitForSingleObject(ThreadPoolFree,INFINITE);
-		WaitForSingleObject(ghMutex,INFINITE);
+		EnterCriticalSection(&CriticalSection);
 	}
 
 	for(uint8_t i=0; i<thread_number; i++)
@@ -440,7 +451,7 @@ bool ThreadPool::RequestThreadPool(DWORD pId,uint8_t thread_number,Public_MT_Dat
 	ThreadPoolRequested=true;
 	ResetEvent(ThreadPoolFree);
 
-	ReleaseMutex(ghMutex);
+	LeaveCriticalSection(&CriticalSection);
 
 	return(true);	
 }
@@ -450,11 +461,11 @@ bool ThreadPool::ReleaseThreadPool(DWORD pId)
 {
 	if (!Status_Ok) return(false);
 
-	WaitForSingleObject(ghMutex,INFINITE);
+	EnterCriticalSection(&CriticalSection);
 
 	if (ThreadPoolRequestProcessId!=pId)
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
@@ -468,7 +479,7 @@ bool ThreadPool::ReleaseThreadPool(DWORD pId)
 		SetEvent(ThreadPoolFree);
 	}
 
-	ReleaseMutex(ghMutex);
+	LeaveCriticalSection(&CriticalSection);
 
 	return(true);
 }
@@ -478,17 +489,17 @@ bool ThreadPool::StartThreads(DWORD pId)
 {
 	if (!Status_Ok) return(false);
 
-	WaitForSingleObject(ghMutex,INFINITE);
+	EnterCriticalSection(&CriticalSection);
 
 	if ((!ThreadPoolRequested) || (CurrentThreadsUsed==0) || (ThreadPoolRequestProcessId!=pId))
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
 	if (JobsRunning)
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(true);
 	}
 
@@ -502,7 +513,7 @@ bool ThreadPool::StartThreads(DWORD pId)
 		SetEvent(MT_Thread[i].nextJob);
 	}
 
-	ReleaseMutex(ghMutex);
+	LeaveCriticalSection(&CriticalSection);
 	return(true);	
 }
 
@@ -511,17 +522,17 @@ bool ThreadPool::WaitThreadsEnd(DWORD pId)
 {
 	if (!Status_Ok) return(false);
 
-	WaitForSingleObject(ghMutex,INFINITE);
+	EnterCriticalSection(&CriticalSection);
 
 	if ((!ThreadPoolRequested) || (CurrentThreadsUsed==0) || (ThreadPoolRequestProcessId!=pId))
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
 	if (!JobsRunning)
 	{
-		ReleaseMutex(ghMutex);
+		LeaveCriticalSection(&CriticalSection);
 		return(true);
 	}
 
@@ -534,7 +545,7 @@ bool ThreadPool::WaitThreadsEnd(DWORD pId)
 	JobsRunning=false;
 	SetEvent(JobsEnded);
 
-	ReleaseMutex(ghMutex);
+	LeaveCriticalSection(&CriticalSection);
 
 	return(true);
 }

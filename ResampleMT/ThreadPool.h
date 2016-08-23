@@ -5,6 +5,7 @@
 #include <Windows.h>
 
 #define MAX_MT_THREADS 128
+#define MAX_THREAD_POOL 1
 
 typedef void (*ThreadPoolFunction)(void *ptr);
 
@@ -38,11 +39,17 @@ class ThreadPool
 {
 	public :
 
-	ThreadPool(void);
 	virtual ~ThreadPool(void);
+	static ThreadPool& Init(uint8_t num);
 
-	uint8_t GetThreadNumber(uint8_t thread_number);
-	bool AllocateThreads(DWORD pId,uint8_t thread_number);
+	protected :
+
+	Arch_CPU CPU;
+
+	public :
+
+	uint8_t GetThreadNumber(uint8_t thread_number,bool logical);
+	bool AllocateThreads(DWORD pId,uint8_t thread_number,uint8_t offset);
 	bool DeAllocateThreads(DWORD pId);
 	bool RequestThreadPool(DWORD pId,uint8_t thread_number,Public_MT_Data_Thread *Data);
 	bool ReleaseThreadPool(DWORD pId);
@@ -51,15 +58,20 @@ class ThreadPool
 	bool GetThreadPoolStatus(void) {return(Status_Ok);}
 	uint8_t GetCurrentThreadAllocated(void) {return(CurrentThreadsAllocated);}
 	uint8_t GetCurrentThreadUsed(void) {return(CurrentThreadsUsed);}
+	uint8_t GetLogicalCPUNumber(void) {return(CPU.NbLogicCPU);}
+	uint8_t GetPhysicalCoreNumber(void) {return(CPU.NbPhysCore);}
 
-	private :
+	protected :
+
+	ThreadPool(void);
 
 	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	HANDLE thds[MAX_MT_THREADS];
 	DWORD tids[MAX_MT_THREADS];
-	Arch_CPU CPU;
 	ULONG_PTR ThreadMask[MAX_MT_THREADS];
-	HANDLE ghMutex,JobsEnded,ThreadPoolFree;
+	CRITICAL_SECTION CriticalSection;
+	BOOL CSectionOk;
+	HANDLE JobsEnded,ThreadPoolFree;
 //	DWORD TabId[MAX_USERS];
 
 	bool Status_Ok,ThreadPoolRequested,JobsRunning;
@@ -67,12 +79,18 @@ class ThreadPool
 	DWORD ThreadPoolRequestProcessId;
 	uint16_t NbreUsers;
 	
-	static DWORD WINAPI StaticThreadpool(LPVOID lpParam);
-
 	void FreeData(void);
 	void FreeThreadPool(void);
-	void CreateThreadPool(void);
+	void CreateThreadPool(uint8_t offset);
 
+	private :
+
+	static DWORD WINAPI StaticThreadpool(LPVOID lpParam);
+
+	ThreadPool (const ThreadPool &other);
+	ThreadPool& operator = (const ThreadPool &other);
+	bool operator == (const ThreadPool &other) const;
+	bool operator != (const ThreadPool &other) const;
 };
 
 #endif // __ThreadPool_H__

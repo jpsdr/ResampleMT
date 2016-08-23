@@ -85,9 +85,11 @@ private:
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
 	DWORD ProcId;
-	HANDLE ghMutex;
+	CRITICAL_SECTION CriticalSection;
+	BOOL CSectionOk;
 	
 	ThreadPoolFunction ResampleH_MT;
+	ThreadPool& local_pool;
 
 	static void StaticThreadpoolH(void *ptr);
 
@@ -141,9 +143,11 @@ private:
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
 	DWORD ProcId;
-	HANDLE ghMutex;
-	
+	CRITICAL_SECTION CriticalSection;
+	BOOL CSectionOk;
+
 	ThreadPoolFunction ResampleV_MT;
+	ThreadPool& local_pool;
 
 	static void StaticThreadpoolV(void *ptr);
 

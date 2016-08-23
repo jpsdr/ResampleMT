@@ -37,9 +37,7 @@
 #include "avs/config.h"
 #include "avs/alignment.h"
 
-extern ThreadPool local_pool;
-
-#define VERSION "ResampleMT 1.1.0 JPSDR"
+#define VERSION "ResampleMT 1.1.1 JPSDR"
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
@@ -799,7 +797,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
   : GenericVideoFilter(_child),
   resampling_program_luma(NULL), resampling_program_chroma(NULL),
   filter_storage_luma(NULL), filter_storage_chroma(NULL),
-  threads(_threads),avsp(_avsp)
+  threads(_threads),avsp(_avsp),local_pool(ThreadPool::Init(0))
 {
   src_width  = vi.width;
   src_height = vi.height;
@@ -830,16 +828,15 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	}
 
 	ProcId=GetCurrentProcessId();
+	CSectionOk=FALSE;
 
-	ghMutex=NULL;
-
-	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeHMT: Error with the TheadPool DLL status !");
+	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeHMT: Error with the TheadPool status !");
 
 	if (vi.height>=32)
 	{
-		threads_number=local_pool.GetThreadNumber(threads);
+		threads_number=local_pool.GetThreadNumber(threads,true);
 		if (threads_number==0)
-			env->ThrowError("ResizeHMT: Error with the TheadPool DLL while getting CPU info !");
+			env->ThrowError("ResizeHMT: Error with the TheadPool while getting CPU info !");
 	}
 	else threads_number=1;
 
@@ -851,14 +848,8 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	
 	threads_number=CreateMTData(threads_number,src_width,vi.height,dst_width,vi.height,shift_w,shift_h);
 
-	ghMutex=CreateMutex(NULL,FALSE,NULL);
-	if (ghMutex==NULL) env->ThrowError("ResizeHMT: Unable to create Mutex !");
-
-	if (!local_pool.AllocateThreads(ProcId,threads_number))
-	{
-		FreeData();
-		env->ThrowError("ResizeHMT: Error with the TheadPool DLL while allocating threadpool !");
-	}
+	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
+	if (CSectionOk==FALSE) env->ThrowError("ResizeHMT: Unable to create Critical Section !");
 
   
   // Main resampling program
@@ -880,6 +871,12 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
   resampler_h_luma = GetResampler(env->GetCPUFlags(), true, pixelsize, resampling_program_luma,env);
 
   if (!grey) resampler_h_chroma = GetResampler(env->GetCPUFlags(), true, pixelsize, resampling_program_chroma,env);
+
+	if (!local_pool.AllocateThreads(ProcId,threads_number,0))
+	{
+		FreeData();
+		env->ThrowError("ResizeHMT: Error with the TheadPool while allocating threadpool !");
+	}
   
   // Change target video info size
   vi.width = target_width;
@@ -1138,7 +1135,7 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 	BYTE* dstp_V = (!grey && vi.IsPlanar()) ? dst->GetWritePtr(PLANAR_V) : NULL;
 
 
-  WaitForSingleObject(ghMutex,INFINITE);
+  EnterCriticalSection(&CriticalSection);
 
   uint8_t Current_Threads=threads_number;
 
@@ -1173,7 +1170,7 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		uint8_t f_proc;
 
 		f_proc=1;
-		for(uint8_t i=0; i<threads_number; i++)
+		for(uint8_t i=0; i<Current_Threads; i++)
 			MT_Thread[i].f_process=f_proc;
 		local_pool.StartThreads(ProcId);
 		local_pool.WaitThreadsEnd(ProcId);
@@ -1181,20 +1178,20 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		if (!grey && vi.IsPlanar())
 		{
 			f_proc=2;
-			for(uint8_t i=0; i<threads_number; i++)
+			for(uint8_t i=0; i<Current_Threads; i++)
 				MT_Thread[i].f_process=f_proc;
 			local_pool.StartThreads(ProcId);
 			local_pool.WaitThreadsEnd(ProcId);
 
 			f_proc=3;
-			for(uint8_t i=0; i<threads_number; i++)
+			for(uint8_t i=0; i<Current_Threads; i++)
 				MT_Thread[i].f_process=f_proc;
 			local_pool.StartThreads(ProcId);
 			local_pool.WaitThreadsEnd(ProcId);
 
 		}
 
-		for(uint8_t i=0; i<threads_number; i++)
+		for(uint8_t i=0; i<Current_Threads; i++)
 			MT_Thread[i].f_process=0;
 
 		local_pool.ReleaseThreadPool(ProcId);
@@ -1214,7 +1211,7 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		}
 	}
 
-	ReleaseMutex(ghMutex);  
+	LeaveCriticalSection(&CriticalSection);
 	
   return dst;
 }
@@ -1250,7 +1247,7 @@ void FilteredResizeH::FreeData(void)
   myalignedfree(filter_storage_luma);
   myalignedfree(filter_storage_chroma);
 
-  myCloseHandle(ghMutex);
+  if (CSectionOk==TRUE) DeleteCriticalSection(&CriticalSection);
 }
 
 FilteredResizeH::~FilteredResizeH(void)
@@ -1271,7 +1268,8 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     src_pitch_table_luma(NULL), src_pitch_table_chromaU(NULL), src_pitch_table_chromaV(NULL),
     src_pitch_luma(-1), src_pitch_chromaU(-1), src_pitch_chromaV(-1),
     filter_storage_luma_aligned(NULL), filter_storage_luma_unaligned(NULL),
-    filter_storage_chroma_aligned(NULL), filter_storage_chroma_unaligned(NULL), threads(_threads),avsp(_avsp)
+    filter_storage_chroma_aligned(NULL), filter_storage_chroma_unaligned(NULL),
+	threads(_threads),avsp(_avsp),local_pool(ThreadPool::Init(0))
 {
 	int16_t i;
 
@@ -1295,17 +1293,17 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 		MT_Thread[i].thread_Id=(uint8_t)i;
 		MT_Thread[i].pFunc=ResampleV_MT;
 	}
-	ghMutex=NULL;
+	CSectionOk=FALSE;
 
 	ProcId=GetCurrentProcessId();
 
-	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeVMT: Error with the TheadPool DLL status !");
+	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeVMT: Error with the TheadPool status !");
 
 	if (vi.height>=32)
 	{
-		threads_number=local_pool.GetThreadNumber(threads);
+		threads_number=local_pool.GetThreadNumber(threads,true);
 		if (threads_number==0)
-			env->ThrowError("ResizeVMT: Error with the TheadPool DLL while getting CPU info !");
+			env->ThrowError("ResizeVMT: Error with the TheadPool while getting CPU info !");
 	}
 	else threads_number=1;
 
@@ -1316,14 +1314,8 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	
 	threads_number=CreateMTData(threads_number,work_width,vi.height,work_width,target_height,shift_w,shift_h);
 
-	ghMutex=CreateMutex(NULL,FALSE,NULL);
-	if (ghMutex==NULL) env->ThrowError("ResizeVMT: Unable to create Mutex !");
-
-	if (!local_pool.AllocateThreads(ProcId,threads_number))
-	{
-		FreeData();
-		env->ThrowError("ResizeVMT: Error with the TheadPool DLL while allocating threadpool !");
-	}
+	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
+	if (CSectionOk==FALSE) env->ThrowError("ResizeVMT: Unable to create Mutex !");
 
   if (vi.IsRGB())
     subrange_top = vi.height - subrange_top - subrange_height; // why?
@@ -1359,6 +1351,12 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     resampler_chroma_aligned   = GetResampler(env->GetCPUFlags(), true ,pixelsize, filter_storage_chroma_aligned,   resampling_program_chroma);
     resampler_chroma_unaligned = GetResampler(env->GetCPUFlags(), false,pixelsize, filter_storage_chroma_unaligned, resampling_program_chroma);
   }
+
+	if (!local_pool.AllocateThreads(ProcId,threads_number,0))
+	{
+		FreeData();
+		env->ThrowError("ResizeVMT: Error with the TheadPool while allocating threadpool !");
+	}
 
   // Change target video info size
   vi.height = target_height;
@@ -1654,7 +1652,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 	BYTE* dstp_V = (!grey && vi.IsPlanar()) ? dst->GetWritePtr(PLANAR_V) : NULL;
 
 
-  WaitForSingleObject(ghMutex,INFINITE);
+  EnterCriticalSection(&CriticalSection);
 
   // Create pitch table
   if (src_pitch_luma != src->GetPitch()) {
@@ -1773,7 +1771,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 		}
 	}
 
-	ReleaseMutex(ghMutex);
+	LeaveCriticalSection(&CriticalSection);
 
   return dst;
 }
@@ -1854,7 +1852,7 @@ void FilteredResizeV::FreeData(void)
   myalignedfree(filter_storage_chroma_aligned);
   myalignedfree(filter_storage_chroma_unaligned);
 
-  myCloseHandle(ghMutex);
+  if (CSectionOk==TRUE) DeleteCriticalSection(&CriticalSection);
 }
 
 
