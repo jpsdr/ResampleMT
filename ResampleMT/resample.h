@@ -39,7 +39,7 @@
 #include <windows.h>
 #include "avisynth.h"
 #include "resample_functions.h"
-#include "ThreadPool.h"
+#include "ThreadPoolInterface.h"
 
 // Resizer function pointer
 typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int MinY, int MaxY, const int* pitch_table, const void* storage);
@@ -84,12 +84,12 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
-	DWORD ProcId;
+	uint16_t UserId;
 	CRITICAL_SECTION CriticalSection;
 	BOOL CSectionOk;
 	
 	ThreadPoolFunction ResampleH_MT;
-	ThreadPool& local_pool;
+	ThreadPoolInterface& poolInterface;
 
 	static void StaticThreadpoolH(void *ptr);
 
@@ -142,12 +142,12 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
-	DWORD ProcId;
+	uint16_t UserId;
 	CRITICAL_SECTION CriticalSection;
 	BOOL CSectionOk;
 
 	ThreadPoolFunction ResampleV_MT;
-	ThreadPool& local_pool;
+	ThreadPoolInterface& poolInterface;
 
 	static void StaticThreadpoolV(void *ptr);
 

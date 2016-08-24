@@ -1,23 +1,9 @@
 #ifndef __ThreadPool_H__
 #define __ThreadPool_H__
 
-#include <stdint.h>
 #include <Windows.h>
 
-#define MAX_MT_THREADS 128
-#define MAX_THREAD_POOL 1
-
-typedef void (*ThreadPoolFunction)(void *ptr);
-
-
-typedef struct _Public_MT_Data_Thread
-{
-	ThreadPoolFunction pFunc;
-	void *pClass;
-	uint8_t f_process,thread_Id;
-} Public_MT_Data_Thread;
-
-
+#include "ThreadPoolDef.h"
 
 typedef struct _MT_Data_Thread
 {
@@ -39,8 +25,7 @@ class ThreadPool
 {
 	public :
 
-	virtual ~ThreadPool(void);
-	static ThreadPool& Init(uint8_t num);
+	ThreadPool(HANDLE _JobsEnded, HANDLE _ThreadPoolFree,bool *_ThreadPoolRequested, bool *_JobsRunning);
 
 	protected :
 
@@ -49,12 +34,12 @@ class ThreadPool
 	public :
 
 	uint8_t GetThreadNumber(uint8_t thread_number,bool logical);
-	bool AllocateThreads(DWORD pId,uint8_t thread_number,uint8_t offset);
-	bool DeAllocateThreads(DWORD pId);
-	bool RequestThreadPool(DWORD pId,uint8_t thread_number,Public_MT_Data_Thread *Data);
-	bool ReleaseThreadPool(DWORD pId);
-	bool StartThreads(DWORD pId);
-	bool WaitThreadsEnd(DWORD pId);
+	bool AllocateThreads(uint8_t thread_number,uint8_t offset);
+	bool DeAllocateThreads(void);
+	bool RequestThreadPool(uint8_t thread_number,Public_MT_Data_Thread *Data);
+	bool ReleaseThreadPool(void);
+	bool StartThreads(void);
+	bool WaitThreadsEnd(void);
 	bool GetThreadPoolStatus(void) {return(Status_Ok);}
 	uint8_t GetCurrentThreadAllocated(void) {return(CurrentThreadsAllocated);}
 	uint8_t GetCurrentThreadUsed(void) {return(CurrentThreadsUsed);}
@@ -66,20 +51,16 @@ class ThreadPool
 	ThreadPool(void);
 
 	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
+	HANDLE nextJob[MAX_MT_THREADS],jobFinished[MAX_MT_THREADS];
 	HANDLE thds[MAX_MT_THREADS];
 	DWORD tids[MAX_MT_THREADS];
 	ULONG_PTR ThreadMask[MAX_MT_THREADS];
-	CRITICAL_SECTION CriticalSection;
-	BOOL CSectionOk;
 	HANDLE JobsEnded,ThreadPoolFree;
-//	DWORD TabId[MAX_USERS];
 
-	bool Status_Ok,ThreadPoolRequested,JobsRunning;
+	bool Status_Ok;
+	bool *ThreadPoolRequested,*JobsRunning;
 	uint8_t TotalThreadsRequested,CurrentThreadsAllocated,CurrentThreadsUsed;
-	DWORD ThreadPoolRequestProcessId;
-	uint16_t NbreUsers;
 	
-	void FreeData(void);
 	void FreeThreadPool(void);
 	void CreateThreadPool(uint8_t offset);
 

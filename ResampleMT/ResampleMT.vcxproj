@@ -166,11 +166,14 @@
     <ClCompile Include="resample.cpp" />
     <ClCompile Include="resample_functions.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
+    <ClCompile Include="ThreadPoolInterface.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resample.h" />
     <ClInclude Include="resample_functions.h" />
     <ClInclude Include="ThreadPool.h" />
+    <ClInclude Include="ThreadPoolDef.h" />
+    <ClInclude Include="ThreadPoolInterface.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resample.rc" />

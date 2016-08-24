@@ -3,14 +3,11 @@
 
 #include "ThreadPool.h"
 
-#define VERSION "ThreadPool 1.0.1"
+#define VERSION "ThreadPool 1.1.0"
 
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
-
-//#define MAX_USERS 500
-
 
 
 // Helper function to count set bits in the processor mask.
@@ -159,21 +156,18 @@ DWORD WINAPI ThreadPool::StaticThreadpool(LPVOID lpParam )
 }
 
 
-ThreadPool& ThreadPool::Init(uint8_t num)
-{
-	static ThreadPool Pool[MAX_THREAD_POOL];
-
-	if (num>=MAX_THREAD_POOL) num=0;
-	return(Pool[num]);
-}
 
 
-ThreadPool::ThreadPool(void):Status_Ok(true)
+ThreadPool::ThreadPool(HANDLE _JobsEnded, HANDLE _ThreadPoolFree,bool *_ThreadPoolRequested, bool *_JobsRunning):
+Status_Ok(true),JobsEnded(_JobsEnded),ThreadPoolFree(_ThreadPoolFree),
+JobsRunning(_JobsRunning),ThreadPoolRequested(_ThreadPoolRequested)
 {
 	int16_t i;
 
 	for (i=0; i<MAX_MT_THREADS; i++)
 	{
+		jobFinished[i]=NULL;
+		nextJob[i]=NULL;
 		MT_Thread[i].MTData=NULL;
 		MT_Thread[i].f_process=0;
 		MT_Thread[i].thread_Id=(uint8_t)i;
@@ -181,16 +175,11 @@ ThreadPool::ThreadPool(void):Status_Ok(true)
 		MT_Thread[i].nextJob=NULL;
 		thds[i]=NULL;
 	}
-//	memset(TabId,0,MAX_USERS*sizeof(DWORD));
-	CSectionOk=FALSE;
-	JobsEnded=NULL;
-	ThreadPoolFree=NULL;
 	TotalThreadsRequested=0;
 	CurrentThreadsAllocated=0;
 	CurrentThreadsUsed=0;
-	NbreUsers=0;
-	JobsRunning=false;
-	ThreadPoolRequested=false;
+	*JobsRunning=false;
+	*ThreadPoolRequested=false;
 
 	Get_CPU_Info(CPU);
 	if ((CPU.NbLogicCPU==0) || (CPU.NbPhysCore==0))
@@ -199,35 +188,13 @@ ThreadPool::ThreadPool(void):Status_Ok(true)
 		return;
 	}
 
-	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
-	if (CSectionOk==FALSE)
+	if ((JobsEnded==NULL) || (ThreadPoolFree==NULL))
 	{
 		Status_Ok=false;
 		return;
 	}
-
-	JobsEnded=CreateEvent(NULL,TRUE,TRUE,NULL);
-	if (JobsEnded==NULL)
-	{
-		FreeData();
-		Status_Ok=false;
-		return;
-	}
-
-	ThreadPoolFree=CreateEvent(NULL,TRUE,TRUE,NULL);
-	if (ThreadPoolFree==NULL)
-	{
-		FreeData();
-		Status_Ok=false;
-	}
 }
 
-
-ThreadPool::~ThreadPool(void)
-{
-	Status_Ok=false;
-	FreeData();
-}
 
 
 void ThreadPool::FreeThreadPool(void) 
@@ -239,7 +206,7 @@ void ThreadPool::FreeThreadPool(void)
 		if (thds[i]!=NULL)
 		{
 			MT_Thread[i].f_process=255;
-			SetEvent(MT_Thread[i].nextJob);
+			SetEvent(nextJob[i]);
 			WaitForSingleObject(thds[i],INFINITE);
 			myCloseHandle(thds[i]);
 		}
@@ -247,27 +214,15 @@ void ThreadPool::FreeThreadPool(void)
 
 	for (i=TotalThreadsRequested-1; i>=0; i--)
 	{
-		myCloseHandle(MT_Thread[i].nextJob);
-		myCloseHandle(MT_Thread[i].jobFinished);
+		myCloseHandle(nextJob[i]);
+		myCloseHandle(jobFinished[i]);
 	}
 
 	TotalThreadsRequested=0;
 	CurrentThreadsAllocated=0;
 	CurrentThreadsUsed=0;
-	JobsRunning=false;
-	ThreadPoolRequested=false;
-}
-
-
-void ThreadPool::FreeData(void) 
-{
-	myCloseHandle(ThreadPoolFree);
-	myCloseHandle(JobsEnded);
-	if (CSectionOk==TRUE)
-	{
-		DeleteCriticalSection(&CriticalSection);
-		CSectionOk=FALSE;
-	}
+	*JobsRunning=false;
+	*ThreadPoolRequested=false;
 }
 
 
@@ -280,84 +235,26 @@ uint8_t ThreadPool::GetThreadNumber(uint8_t thread_number,bool logical)
 }
 
 
-bool ThreadPool::AllocateThreads(DWORD pId,uint8_t thread_number,uint8_t offset)
+bool ThreadPool::AllocateThreads(uint8_t thread_number,uint8_t offset)
 {
-	if (!Status_Ok) return(false);
-
-	EnterCriticalSection(&CriticalSection);
-
-	if (thread_number==0)
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(false);
-	}
-
-/*	if (NbreUsers>=MAX_USERS)
-	{
-		ReleaseMutex(ghMutex);
-		return(false);
-	}
-
-	uint16_t i=0;
-	while ((NbreUsers>i) && (TabId[i]!=pId)) i++;
-	if (i==NbreUsers)
-	{
-		TabId[i]=pId;
-		NbreUsers++;
-	}*/
-	NbreUsers++;
+	if ((!Status_Ok) || (thread_number==0)) return(false);
 
 	if (thread_number>CurrentThreadsAllocated)
 	{
 		TotalThreadsRequested=thread_number;
-		while (JobsRunning)
-		{
-			LeaveCriticalSection(&CriticalSection);
-			WaitForSingleObject(JobsEnded,INFINITE);
-			EnterCriticalSection(&CriticalSection);
-		}
 		CreateThreadPool(offset);
 		if (!Status_Ok) return(false);
 	}
-
-	LeaveCriticalSection(&CriticalSection);
 
 	return(true);
 }
 
 
-bool ThreadPool::DeAllocateThreads(DWORD pId)
+bool ThreadPool::DeAllocateThreads(void)
 {
 	if (!Status_Ok) return(false);
 
-	EnterCriticalSection(&CriticalSection);
-
-	if (NbreUsers==0)
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(true);
-	}
-
-/*	uint16_t i=0;
-	while ((NbreUsers>i) && (TabId[i]!=pId)) i++;
-	if (i==NbreUsers)
-	{
-		ReleaseMutex(ghMutex);
-		return(false);
-	}
-
-	if (i<NbreUsers-1)
-	{
-		for(uint16_t j=i+1; j<NbreUsers; j++)
-			TabId[j-1]=TabId[j];
-	}
-	NbreUsers--;
-	TabId[NbreUsers]=0;*/
-	NbreUsers--;
-
-	if (NbreUsers==0) FreeThreadPool();
-
-	LeaveCriticalSection(&CriticalSection);
+	FreeThreadPool();
 
 	return(true);
 }
@@ -385,16 +282,16 @@ void ThreadPool::CreateThreadPool(uint8_t offset)
 	i=CurrentThreadsAllocated;
 	while ((i<TotalThreadsRequested) && Status_Ok)
 	{
-		MT_Thread[i].jobFinished=CreateEvent(NULL,TRUE,TRUE,NULL);
-		MT_Thread[i].nextJob=CreateEvent(NULL,TRUE,FALSE,NULL);
+		jobFinished[i]=CreateEvent(NULL,TRUE,TRUE,NULL);
+		nextJob[i]=CreateEvent(NULL,TRUE,FALSE,NULL);
+		MT_Thread[i].jobFinished=jobFinished[i];
+		MT_Thread[i].nextJob=nextJob[i];
 		Status_Ok=Status_Ok && ((MT_Thread[i].jobFinished!=NULL) && (MT_Thread[i].nextJob!=NULL));
 		i++;
 	}
 	if (!Status_Ok)
 	{
 		FreeThreadPool();
-		LeaveCriticalSection(&CriticalSection);
-		FreeData();
 		return;
 	}
 
@@ -413,8 +310,6 @@ void ThreadPool::CreateThreadPool(uint8_t offset)
 	if (!Status_Ok)
 	{
 		FreeThreadPool();
-		LeaveCriticalSection(&CriticalSection);
-		FreeData();
 		return;
 	}
 
@@ -422,130 +317,73 @@ void ThreadPool::CreateThreadPool(uint8_t offset)
 }
 
 
-bool ThreadPool::RequestThreadPool(DWORD pId,uint8_t thread_number,Public_MT_Data_Thread *Data)
+
+bool ThreadPool::RequestThreadPool(uint8_t thread_number,Public_MT_Data_Thread *Data)
 {
-	if (!Status_Ok) return(false);
-
-	EnterCriticalSection(&CriticalSection);
-
-	if (thread_number>CurrentThreadsAllocated)
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(false);
-	}
-
-	while (ThreadPoolRequested)
-	{
-		LeaveCriticalSection(&CriticalSection);
-		WaitForSingleObject(ThreadPoolFree,INFINITE);
-		EnterCriticalSection(&CriticalSection);
-	}
+	if ((!Status_Ok) || (thread_number>CurrentThreadsAllocated)) return(false);
 
 	for(uint8_t i=0; i<thread_number; i++)
 		MT_Thread[i].MTData=Data+i;
 
 	CurrentThreadsUsed=thread_number;
 
-	ThreadPoolRequestProcessId=pId;
-
-	ThreadPoolRequested=true;
+	*ThreadPoolRequested=true;
 	ResetEvent(ThreadPoolFree);
-
-	LeaveCriticalSection(&CriticalSection);
 
 	return(true);	
 }
 
 
-bool ThreadPool::ReleaseThreadPool(DWORD pId)
+bool ThreadPool::ReleaseThreadPool(void)
 {
 	if (!Status_Ok) return(false);
 
-	EnterCriticalSection(&CriticalSection);
-
-	if (ThreadPoolRequestProcessId!=pId)
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(false);
-	}
-
-	if (ThreadPoolRequested)
+	if (*ThreadPoolRequested)
 	{
 		for(uint8_t i=0; i<CurrentThreadsUsed; i++)
 			MT_Thread[i].MTData=NULL;
 		CurrentThreadsUsed=0;
-		ThreadPoolRequested=false;
-		ThreadPoolRequestProcessId=0;
+		*ThreadPoolRequested=false;
 		SetEvent(ThreadPoolFree);
 	}
-
-	LeaveCriticalSection(&CriticalSection);
 
 	return(true);
 }
 
 
-bool ThreadPool::StartThreads(DWORD pId)
+bool ThreadPool::StartThreads(void)
 {
-	if (!Status_Ok) return(false);
+	if ((!Status_Ok) || (!*ThreadPoolRequested) || (CurrentThreadsUsed==0)) return(false);
 
-	EnterCriticalSection(&CriticalSection);
+	if (*JobsRunning) return(true);
 
-	if ((!ThreadPoolRequested) || (CurrentThreadsUsed==0) || (ThreadPoolRequestProcessId!=pId))
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(false);
-	}
-
-	if (JobsRunning)
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(true);
-	}
-
-	JobsRunning=true;
+	*JobsRunning=true;
 	ResetEvent(JobsEnded);
 
 	for(uint8_t i=0; i<CurrentThreadsUsed; i++)
 	{
 		MT_Thread[i].f_process=1;
-		ResetEvent(MT_Thread[i].jobFinished);
-		SetEvent(MT_Thread[i].nextJob);
+		ResetEvent(jobFinished[i]);
+		SetEvent(nextJob[i]);
 	}
 
-	LeaveCriticalSection(&CriticalSection);
 	return(true);	
 }
 
 
-bool ThreadPool::WaitThreadsEnd(DWORD pId)
+bool ThreadPool::WaitThreadsEnd(void)
 {
-	if (!Status_Ok) return(false);
+	if ((!Status_Ok) || (!*ThreadPoolRequested) || (CurrentThreadsUsed==0)) return(false);
 
-	EnterCriticalSection(&CriticalSection);
+	if (!*JobsRunning) return(true);
 
-	if ((!ThreadPoolRequested) || (CurrentThreadsUsed==0) || (ThreadPoolRequestProcessId!=pId))
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(false);
-	}
-
-	if (!JobsRunning)
-	{
-		LeaveCriticalSection(&CriticalSection);
-		return(true);
-	}
-
-	for(uint8_t i=0; i<CurrentThreadsUsed; i++)
-		WaitForSingleObject(MT_Thread[i].jobFinished,INFINITE);
+	WaitForMultipleObjects(CurrentThreadsUsed,jobFinished,TRUE,INFINITE);
 
 	for(uint8_t i=0; i<CurrentThreadsUsed; i++)
 		MT_Thread[i].f_process=0;
 
-	JobsRunning=false;
+	*JobsRunning=false;
 	SetEvent(JobsEnded);
-
-	LeaveCriticalSection(&CriticalSection);
 
 	return(true);
 }

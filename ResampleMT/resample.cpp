@@ -37,7 +37,7 @@
 #include "avs/config.h"
 #include "avs/alignment.h"
 
-#define VERSION "ResampleMT 1.1.1 JPSDR"
+#define VERSION "ResampleMT 1.2.0 JPSDR"
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
@@ -797,7 +797,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
   : GenericVideoFilter(_child),
   resampling_program_luma(NULL), resampling_program_chroma(NULL),
   filter_storage_luma(NULL), filter_storage_chroma(NULL),
-  threads(_threads),avsp(_avsp),local_pool(ThreadPool::Init(0))
+  threads(_threads),avsp(_avsp),poolInterface(ThreadPoolInterface::Init(1))
 {
   src_width  = vi.width;
   src_height = vi.height;
@@ -827,14 +827,14 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 		MT_Thread[i].pFunc=ResampleH_MT;
 	}
 
-	ProcId=GetCurrentProcessId();
+	UserId=0;
 	CSectionOk=FALSE;
 
-	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeHMT: Error with the TheadPool status !");
+	if (!poolInterface.GetThreadPoolInterfaceStatus()) env->ThrowError("ResizeHMT: Error with the TheadPool status !");
 
 	if (vi.height>=32)
 	{
-		threads_number=local_pool.GetThreadNumber(threads,true);
+		threads_number=poolInterface.GetThreadNumber(threads,false);
 		if (threads_number==0)
 			env->ThrowError("ResizeHMT: Error with the TheadPool while getting CPU info !");
 	}
@@ -872,7 +872,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 
   if (!grey) resampler_h_chroma = GetResampler(env->GetCPUFlags(), true, pixelsize, resampling_program_chroma,env);
 
-	if (!local_pool.AllocateThreads(ProcId,threads_number,0))
+	if (!poolInterface.AllocateThreads(UserId,threads_number,0,0))
 	{
 		FreeData();
 		env->ThrowError("ResizeHMT: Error with the TheadPool while allocating threadpool !");
@@ -1137,14 +1137,16 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
   EnterCriticalSection(&CriticalSection);
 
-  uint8_t Current_Threads=threads_number;
-
   if (threads_number>1)
   {
-	if (!local_pool.RequestThreadPool(ProcId,threads_number,MT_Thread)) Current_Threads=1;
+	if (!poolInterface.RequestThreadPool(UserId,threads_number,MT_Thread,0))
+	{
+		FreeData();
+		env->ThrowError("ResizeHMT: Error with the TheadPool while requesting threadpool !");
+	}
   }
   
-	for(uint8_t i=0; i<Current_Threads; i++)
+	for(uint8_t i=0; i<threads_number; i++)
 	{
 		MT_Data[i].src1=srcp_Y+(MT_Data[i].src_Y_h_min*src_pitch_Y);
 		MT_Data[i].src2=srcp_U+(MT_Data[i].src_UV_h_min*src_pitch_U);
@@ -1165,36 +1167,36 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		MT_Data[i].filter_storage_chromaV=filter_storage_chroma;
 	}
 
-	if (Current_Threads>1)
+	if (threads_number>1)
 	{
 		uint8_t f_proc;
 
 		f_proc=1;
-		for(uint8_t i=0; i<Current_Threads; i++)
+		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=f_proc;
-		local_pool.StartThreads(ProcId);
-		local_pool.WaitThreadsEnd(ProcId);
+		poolInterface.StartThreads(UserId);
+		poolInterface.WaitThreadsEnd(UserId);
 
 		if (!grey && vi.IsPlanar())
 		{
 			f_proc=2;
-			for(uint8_t i=0; i<Current_Threads; i++)
+			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			local_pool.StartThreads(ProcId);
-			local_pool.WaitThreadsEnd(ProcId);
+			poolInterface.StartThreads(UserId);
+			poolInterface.WaitThreadsEnd(UserId);
 
 			f_proc=3;
-			for(uint8_t i=0; i<Current_Threads; i++)
+			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			local_pool.StartThreads(ProcId);
-			local_pool.WaitThreadsEnd(ProcId);
+			poolInterface.StartThreads(UserId);
+			poolInterface.WaitThreadsEnd(UserId);
 
 		}
 
-		for(uint8_t i=0; i<Current_Threads; i++)
+		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
 
-		local_pool.ReleaseThreadPool(ProcId);
+		poolInterface.ReleaseThreadPool(UserId);
 	}
 	else
 	{
@@ -1252,7 +1254,7 @@ void FilteredResizeH::FreeData(void)
 
 FilteredResizeH::~FilteredResizeH(void)
 {
-	local_pool.DeAllocateThreads(ProcId);
+	poolInterface.DeAllocateThreads(UserId);
 	FreeData();
 }
 
@@ -1269,7 +1271,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     src_pitch_luma(-1), src_pitch_chromaU(-1), src_pitch_chromaV(-1),
     filter_storage_luma_aligned(NULL), filter_storage_luma_unaligned(NULL),
     filter_storage_chroma_aligned(NULL), filter_storage_chroma_unaligned(NULL),
-	threads(_threads),avsp(_avsp),local_pool(ThreadPool::Init(0))
+	threads(_threads),avsp(_avsp),poolInterface(ThreadPoolInterface::Init(1))
 {
 	int16_t i;
 
@@ -1293,15 +1295,14 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 		MT_Thread[i].thread_Id=(uint8_t)i;
 		MT_Thread[i].pFunc=ResampleV_MT;
 	}
+	UserId=0;
 	CSectionOk=FALSE;
 
-	ProcId=GetCurrentProcessId();
-
-	if (!local_pool.GetThreadPoolStatus()) env->ThrowError("ResizeVMT: Error with the TheadPool status !");
+	if (!poolInterface.GetThreadPoolInterfaceStatus()) env->ThrowError("ResizeVMT: Error with the TheadPool status !");
 
 	if (vi.height>=32)
 	{
-		threads_number=local_pool.GetThreadNumber(threads,true);
+		threads_number=poolInterface.GetThreadNumber(threads,false);
 		if (threads_number==0)
 			env->ThrowError("ResizeVMT: Error with the TheadPool while getting CPU info !");
 	}
@@ -1352,7 +1353,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     resampler_chroma_unaligned = GetResampler(env->GetCPUFlags(), false,pixelsize, filter_storage_chroma_unaligned, resampling_program_chroma);
   }
 
-	if (!local_pool.AllocateThreads(ProcId,threads_number,0))
+	if (!poolInterface.AllocateThreads(UserId,threads_number,0,0))
 	{
 		FreeData();
 		env->ThrowError("ResizeVMT: Error with the TheadPool while allocating threadpool !");
@@ -1670,14 +1671,16 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
     resize_v_create_pitch_table(src_pitch_table_chromaV, src_pitch_chromaV, src->GetHeight(PLANAR_V),pixelsize);
   }
 
-  uint8_t Current_Threads=threads_number;
-
   if (threads_number>1)
   {
-	if (!local_pool.RequestThreadPool(ProcId,threads_number,MT_Thread)) Current_Threads=1;
+	if (!poolInterface.RequestThreadPool(UserId,threads_number,MT_Thread,0))
+	{
+		FreeData();
+		env->ThrowError("ResizeHMT: Error with the TheadPool while requesting threadpool !");
+	}
   }
 
-	for(uint8_t i=0; i<Current_Threads; i++)
+	for(uint8_t i=0; i<threads_number; i++)
 	{
 		MT_Data[i].src1=srcp_Y;
 		MT_Data[i].src2=srcp_U;
@@ -1711,7 +1714,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 	}
 
 
-	if (Current_Threads>1)
+	if (threads_number>1)
 	{
 		uint8_t f_proc;
 
@@ -1720,8 +1723,8 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=f_proc;
-		local_pool.StartThreads(ProcId);
-		local_pool.WaitThreadsEnd(ProcId);
+		poolInterface.StartThreads(UserId);
+		poolInterface.WaitThreadsEnd(UserId);
 
 		if (!vi.IsY8() && vi.IsPlanar())
 		{
@@ -1730,22 +1733,22 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			local_pool.StartThreads(ProcId);
-			local_pool.WaitThreadsEnd(ProcId);
+			poolInterface.StartThreads(UserId);
+			poolInterface.WaitThreadsEnd(UserId);
 
 			if (IsPtrAligned(srcp_V, 16) && (src_pitch_V & 15) == 0) f_proc=5;
 			else f_proc=6;
 
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			local_pool.StartThreads(ProcId);
-			local_pool.WaitThreadsEnd(ProcId);
+			poolInterface.StartThreads(UserId);
+			poolInterface.WaitThreadsEnd(UserId);
 		}
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=0;
 
-		local_pool.ReleaseThreadPool(ProcId);
+		poolInterface.ReleaseThreadPool(UserId);
 	}
 	else
 	{
@@ -1858,7 +1861,7 @@ void FilteredResizeV::FreeData(void)
 
 FilteredResizeV::~FilteredResizeV(void)
 {
-	local_pool.DeAllocateThreads(ProcId);
+	poolInterface.DeAllocateThreads(UserId);
 	FreeData();
 }
 
