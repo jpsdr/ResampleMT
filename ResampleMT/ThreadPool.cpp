@@ -108,24 +108,71 @@ static ULONG_PTR GetCPUMask(ULONG_PTR bitMask, uint8_t CPU_Nb)
 }
 
 
-static void CreateThreadsMasks(Arch_CPU cpu, ULONG_PTR *TabMask,uint8_t NbThread,uint8_t offset)
+static void CreateThreadsMasks(Arch_CPU cpu, ULONG_PTR *TabMask,uint8_t NbThread,uint8_t offset_core,uint8_t offset_ht,bool UseMaxPhysCore)
 {
 	memset(TabMask,0,NbThread*sizeof(ULONG_PTR));
 
 	if ((cpu.NbLogicCPU==0) || (cpu.NbPhysCore==0)) return;
 
-	uint8_t current_thread=0;
+	uint8_t i_cpu=offset_core%cpu.NbPhysCore;
+	uint8_t i_ht=offset_ht%cpu.NbHT[i_cpu];
+	uint8_t current_thread=0,nb_cpu=0;
 
-	for(uint8_t i=0; i<cpu.NbPhysCore; i++)
+	if (cpu.NbPhysCore==cpu.NbLogicCPU)
 	{
-		uint8_t Nb_Core_Th=NbThread/cpu.NbPhysCore+( ((NbThread%cpu.NbPhysCore)>i) ? 1:0 );
-
-		if (Nb_Core_Th>0)
+		while (NbThread>current_thread)
 		{
-			const uint8_t offs=(cpu.NbHT[i]>offset) ? offset:cpu.NbHT[i]-1;
+			uint8_t Nb_Core_Th=NbThread/cpu.NbPhysCore+( ((NbThread%cpu.NbPhysCore)>nb_cpu) ? 1:0 );
 
-			for(uint8_t j=0; j<Nb_Core_Th; j++)
-				TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i],(j+offs)%cpu.NbHT[i]);
+			for(uint8_t i=0; i<Nb_Core_Th; i++)
+				TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i_cpu],0);
+
+			nb_cpu++;
+			i_cpu=(i_cpu+1)%cpu.NbPhysCore;
+		}
+	}
+	else
+	{
+		if (UseMaxPhysCore)
+		{
+			if (NbThread>cpu.NbPhysCore)
+			{
+				while (NbThread>current_thread)
+				{
+					uint8_t Nb_Core_Th=NbThread/cpu.NbPhysCore+( ((NbThread%cpu.NbPhysCore)>nb_cpu) ? 1:0 );
+
+					for(uint8_t i=0; i<Nb_Core_Th; i++)
+						TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i_cpu],(i+i_ht)%cpu.NbHT[i_cpu]);
+
+					nb_cpu++;
+					i_cpu=(i_cpu+1)%cpu.NbPhysCore;
+				}
+			}
+			else
+			{
+				while (NbThread>current_thread)
+				{
+					TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i_cpu],i_ht);
+					i_cpu=(i_cpu+1)%cpu.NbPhysCore;
+				}
+			}
+		}
+		else
+		{
+			while (NbThread>current_thread)
+			{
+				uint8_t Nb_Core_Th=NbThread/cpu.NbPhysCore+( ((NbThread%cpu.NbPhysCore)>nb_cpu) ? 1:0 );
+
+				Nb_Core_Th=(Nb_Core_Th<(cpu.NbHT[i_cpu]-i_ht)) ? (cpu.NbHT[i_cpu]-i_ht):Nb_Core_Th;
+				Nb_Core_Th=(Nb_Core_Th<=(NbThread-current_thread)) ? Nb_Core_Th:(NbThread-current_thread);
+
+				for (uint8_t i=0; i<Nb_Core_Th; i++)
+					TabMask[current_thread++]=GetCPUMask(cpu.ProcMask[i_cpu],i+i_ht);
+
+				i_cpu=(i_cpu+1)%cpu.NbPhysCore;
+				nb_cpu++;
+				i_ht=0;
+			}
 		}
 	}
 }
@@ -235,14 +282,14 @@ uint8_t ThreadPool::GetThreadNumber(uint8_t thread_number,bool logical)
 }
 
 
-bool ThreadPool::AllocateThreads(uint8_t thread_number,uint8_t offset)
+bool ThreadPool::AllocateThreads(uint8_t thread_number,uint8_t offset_core,uint8_t offset_ht,bool UseMaxPhysCore)
 {
 	if ((!Status_Ok) || (thread_number==0)) return(false);
 
 	if (thread_number>CurrentThreadsAllocated)
 	{
 		TotalThreadsRequested=thread_number;
-		CreateThreadPool(offset);
+		CreateThreadPool(offset_core,offset_ht,UseMaxPhysCore);
 		if (!Status_Ok) return(false);
 	}
 
@@ -261,7 +308,7 @@ bool ThreadPool::DeAllocateThreads(void)
 
 
 
-void ThreadPool::CreateThreadPool(uint8_t offset)
+void ThreadPool::CreateThreadPool(uint8_t offset_core,uint8_t offset_ht,bool UseMaxPhysCore)
 {
 	int16_t i;
 
@@ -271,7 +318,7 @@ void ThreadPool::CreateThreadPool(uint8_t offset)
 			SuspendThread(thds[i]);
 	}
 
-	CreateThreadsMasks(CPU,ThreadMask,TotalThreadsRequested,offset);
+	CreateThreadsMasks(CPU,ThreadMask,TotalThreadsRequested,offset_core,offset_ht,UseMaxPhysCore);
 
 	for(i=0; i<CurrentThreadsAllocated; i++)
 	{

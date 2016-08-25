@@ -4,101 +4,60 @@
 #include "ThreadPoolInterface.h"
 #include "ThreadPool.h"
 
-#define VERSION "ThreadPoolInterface 1.0.0"
+#define VERSION "ThreadPoolInterface 1.0.1"
 
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
+#define mydelete(ptr) if (ptr!=NULL) { delete ptr; ptr=NULL;}
 
-static ThreadPool **ptrPool=NULL;
 
-ThreadPoolInterface& ThreadPoolInterface::Init(uint8_t num)
+static ThreadPool *ptrPool[MAX_THREAD_POOL]={NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
+
+
+ThreadPoolInterface* ThreadPoolInterface::Init(uint8_t num)
 {
 
 	static ThreadPoolInterface PoolInterface;
 
-	if (num>=MAX_THREAD_POOL) num=MAX_THREAD_POOL;
-
-	if (PoolInterface.EnterCS() && (num>0))
+	if (PoolInterface.EnterCS())
 	{
-		if (PoolInterface.CreatePoolEvent(num))
+		if (num>=MAX_THREAD_POOL) num=MAX_THREAD_POOL;
+
+		if (num>PoolInterface.NbrePool)
 		{
-			if (ptrPool==NULL)
+			if (PoolInterface.CreatePoolEvent(num))
 			{
-				ptrPool=(ThreadPool**)malloc(num*sizeof(ThreadPool*));
-				if (ptrPool!=NULL)
+				while ((PoolInterface.NbrePool<num) && PoolInterface.Status_Ok)
 				{
-					for(uint8_t i=0; i<num; i++)
-						ptrPool[i]=NULL;
-					while ((PoolInterface.NbrePool<num) && PoolInterface.Status_Ok)
-					{
-						ptrPool[PoolInterface.NbrePool]= new
-							ThreadPool(PoolInterface.JobsEnded[PoolInterface.NbrePool],
-								PoolInterface.ThreadPoolFree[PoolInterface.NbrePool],
-								&PoolInterface.ThreadPoolRequested[PoolInterface.NbrePool],
-								&PoolInterface.JobsRunning[PoolInterface.NbrePool]);
-						PoolInterface.Status_Ok = PoolInterface.Status_Ok && 
-							(ptrPool[PoolInterface.NbrePool]!=NULL);
-						PoolInterface.NbrePool++;
-					}
-					if (!PoolInterface.Status_Ok)
-					{
-						PoolInterface.FreePool();
-						PoolInterface.LeaveCS();
-						PoolInterface.FreeData();
-					}
+					ptrPool[PoolInterface.NbrePool]= new
+						ThreadPool(PoolInterface.JobsEnded[PoolInterface.NbrePool],
+							PoolInterface.ThreadPoolFree[PoolInterface.NbrePool],
+							&PoolInterface.ThreadPoolRequested[PoolInterface.NbrePool],
+							&PoolInterface.JobsRunning[PoolInterface.NbrePool]);
+					PoolInterface.Status_Ok=PoolInterface.Status_Ok &&
+						(ptrPool[PoolInterface.NbrePool]!=NULL);
+					PoolInterface.NbrePool++;
 				}
-				else
+				if (!PoolInterface.Status_Ok)
 				{
-					PoolInterface.Status_Ok=false;
+					PoolInterface.FreePool();
 					PoolInterface.LeaveCS();
 					PoolInterface.FreeData();
 				}
+				else PoolInterface.LeaveCS();
 			}
 			else
 			{
-				if (PoolInterface.NbrePool>0)
-				{
-					if (num>PoolInterface.NbrePool)
-					{
-						for(uint8_t i=PoolInterface.NbrePool; i<num; i++)
-							ptrPool[i]=NULL;
-						while ((PoolInterface.NbrePool<num) && PoolInterface.Status_Ok)
-						{
-							ptrPool[PoolInterface.NbrePool]= new
-								ThreadPool(PoolInterface.JobsEnded[PoolInterface.NbrePool],
-									PoolInterface.ThreadPoolFree[PoolInterface.NbrePool],
-									&PoolInterface.ThreadPoolRequested[PoolInterface.NbrePool],
-									&PoolInterface.JobsRunning[PoolInterface.NbrePool]);
-							PoolInterface.Status_Ok = PoolInterface.Status_Ok && 
-								(ptrPool[PoolInterface.NbrePool]!=NULL);
-							PoolInterface.NbrePool++;
-						}
-						if (!PoolInterface.Status_Ok)
-						{
-							PoolInterface.FreePool();
-							PoolInterface.LeaveCS();
-							PoolInterface.FreeData();
-						}
-					}
-				}
-				else
-				{
-					PoolInterface.Status_Ok=false;
-					PoolInterface.LeaveCS();
-					PoolInterface.FreeData();
-				}
+				PoolInterface.FreePool();
+				PoolInterface.LeaveCS();
+				PoolInterface.FreeData();
 			}
 		}
-		else
-		{
-			PoolInterface.FreePool();
-			PoolInterface.LeaveCS();
-			PoolInterface.FreeData();
-		}
+		else PoolInterface.LeaveCS();
 	}
 
-	return(PoolInterface);
+	return(&PoolInterface);
 }
 
 
@@ -143,21 +102,24 @@ void ThreadPoolInterface::FreeData(void)
 {
 	int16_t i;
 
-	if ((ptrPool!=NULL) && (NbrePool>0))
+	if (NbrePool>0)
 	{
-		for(int16_t i=NbrePool-1; i>=0; i--)
-			if (ptrPool[i]!=NULL) delete ptrPool[i];
+		for(i=NbrePool-1; i>=0; i--)
+			mydelete(ptrPool[i]);
+		NbrePool=0;
 	}
-	myfree(ptrPool);
-	NbrePool=0;
 
-	for(i=NbrePoolEvent-1; i>=0; i--)
+	if (NbrePoolEvent>0)
 	{
-		myCloseHandle(ThreadPoolFree[i]);
-		myCloseHandle(JobsEnded[i]);
+		for(i=NbrePoolEvent-1; i>=0; i--)
+		{
+			myCloseHandle(ThreadPoolFree[i]);
+			myCloseHandle(JobsEnded[i]);
+		}
+		NbrePoolEvent=0;
 	}
-	NbrePoolEvent=0;
 
+	myCloseHandle(EndExclusive);
 	if (CSectionOk==TRUE)
 	{
 		CSectionOk=FALSE;
@@ -187,8 +149,17 @@ void ThreadPoolInterface::FreePool(void)
 }
 
 
-ThreadPoolInterface::ThreadPoolInterface(void):Status_Ok(true),NbrePool(0),NbrePoolEvent(0)
+ThreadPoolInterface::ThreadPoolInterface(void):CSectionOk(FALSE),Status_Ok(true),NbrePool(0),NbrePoolEvent(0)
 {
+	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
+	if (CSectionOk==FALSE) Status_Ok=false;
+
+	EndExclusive=NULL;
+	ExclusiveMode=false;
+
+	EndExclusive=CreateEvent(NULL,TRUE,TRUE,NULL);
+	if (EndExclusive==NULL) Status_Ok=false;
+
 	uint16_t i;
 
 	for (i=0; i<MAX_THREAD_POOL; i++)
@@ -204,11 +175,6 @@ ThreadPoolInterface::ThreadPoolInterface(void):Status_Ok(true),NbrePool(0),NbreP
 		TabId[i].UserId=0;
 		TabId[i].nPool=-1;
 	}
-
-	ThreadPoolRequestUserIndex=-1;
-
-	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
-	if (CSectionOk==FALSE) Status_Ok=false;
 }
 
 
@@ -226,13 +192,14 @@ uint8_t ThreadPoolInterface::GetThreadNumber(uint8_t thread_number,bool logical)
 }
 
 
-bool ThreadPoolInterface::AllocateThreads(uint16_t &UserId,uint8_t thread_number,uint8_t offset,int16_t nPool)
+
+bool ThreadPoolInterface::AllocateThreads(uint16_t &UserId,uint8_t thread_number,uint8_t offset_core,uint8_t offset_ht,bool UseMaxPhysCore,int8_t nPool)
 {
 	if (!Status_Ok) return(false);
 
 	EnterCriticalSection(&CriticalSection);
 
-	if ((thread_number==0) || (NbreUsers>=MAX_USERS) || (nPool>=NbrePool))
+	if ((thread_number==0) || ((UserId==0) && (NbreUsers>=MAX_USERS)) || (nPool>=(int8_t)NbrePool) || (nPool<-1))
 	{
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
@@ -240,9 +207,27 @@ bool ThreadPoolInterface::AllocateThreads(uint16_t &UserId,uint8_t thread_number
 
 	if (UserId==0)
 	{
+		uint16_t user=1;
+
+		if (NbreUsers>0)
+		{
+			bool found=false;
+
+			while (!found && (user<=NbreUsers))
+			{
+				uint16_t i=0;
+				bool search=true;
+
+				while (search && (i<NbreUsers))
+					search=search && (TabId[i++].UserId!=user);
+				found=search;
+				if (!found) user++;
+			}
+		}
 		NbreUsers++;
-		UserId=NbreUsers;
+		UserId=user;
 		TabId[NbreUsers-1].UserId=UserId;
+		TabId[NbreUsers-1].nPool=-1;
 	}
 	else
 	{
@@ -268,7 +253,7 @@ bool ThreadPoolInterface::AllocateThreads(uint16_t &UserId,uint8_t thread_number
 					WaitForSingleObject(JobsEnded[i],INFINITE);
 					EnterCriticalSection(&CriticalSection);
 				}
-				Status_Ok=ptrPool[i]->AllocateThreads(thread_number,offset);
+				Status_Ok=ptrPool[i]->AllocateThreads(thread_number,offset_core,offset_ht,UseMaxPhysCore);
 				if (!Status_Ok)
 				{
 					FreePool();
@@ -289,7 +274,7 @@ bool ThreadPoolInterface::AllocateThreads(uint16_t &UserId,uint8_t thread_number
 				WaitForSingleObject(JobsEnded[nPool],INFINITE);
 				EnterCriticalSection(&CriticalSection);
 			}
-			Status_Ok=ptrPool[nPool]->AllocateThreads(thread_number,offset);
+			Status_Ok=ptrPool[nPool]->AllocateThreads(thread_number,offset_core,offset_ht,UseMaxPhysCore);
 			if (!Status_Ok)
 			{
 				FreePool();
@@ -318,18 +303,18 @@ bool ThreadPoolInterface::DeAllocateThreads(uint16_t UserId)
 		return(true);
 	}
 
-	uint16_t i=0;
+	uint16_t index=0;
 
-	while ((NbreUsers>i) && (TabId[i].UserId!=UserId)) i++;
-	if (i==NbreUsers)
+	while ((NbreUsers>index) && (TabId[index].UserId!=UserId)) index++;
+	if (index==NbreUsers)
 	{
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
-	if (i<NbreUsers-1)
+	if (index<NbreUsers-1)
 	{
-		for(uint16_t j=i+1; j<NbreUsers; j++)
+		for(uint16_t j=index+1; j<NbreUsers; j++)
 			TabId[j-1]=TabId[j];
 	}
 	NbreUsers--;
@@ -344,31 +329,43 @@ bool ThreadPoolInterface::DeAllocateThreads(uint16_t UserId)
 }
 
 
-bool ThreadPoolInterface::RequestThreadPool(uint16_t UserId,uint8_t thread_number,Public_MT_Data_Thread *Data,int16_t nPool)
+bool ThreadPoolInterface::RequestThreadPool(uint16_t UserId,uint8_t thread_number,Public_MT_Data_Thread *Data,int8_t nPool,bool Exclusive)
 {
 	if (!Status_Ok) return(false);
 
 	EnterCriticalSection(&CriticalSection);
 
-	if ((UserId==0) || (NbreUsers==0) || (nPool>=NbrePool) || (thread_number==0) || (Data==NULL))
+	if ((UserId==0) || (NbreUsers==0) || (nPool>=(int8_t)NbrePool) || (nPool<-1) || (thread_number==0) || (Data==NULL))
 	{
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
-	uint16_t i=0;
+	uint16_t userindex=0;
 
-	while ((NbreUsers>i) && (TabId[i].UserId!=UserId)) i++;
-	if (i==NbreUsers)
+	while ((NbreUsers>userindex) && (TabId[userindex].UserId!=UserId)) userindex++;
+	if (userindex==NbreUsers)
 	{
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
-	ThreadPoolRequestUserIndex=i;
+
+	if (TabId[userindex].nPool>=0)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
+
+	while (ExclusiveMode)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		WaitForSingleObject(EndExclusive,INFINITE);
+		EnterCriticalSection(&CriticalSection);
+	}
 
 	if (nPool==-1)
 	{
-		if (NbrePool>1)
+		if ((NbrePool>1) && (!Exclusive))
 		{
 			DWORD a;
 			bool PoolFree=false;
@@ -378,7 +375,7 @@ bool ThreadPoolInterface::RequestThreadPool(uint16_t UserId,uint8_t thread_numbe
 				LeaveCriticalSection(&CriticalSection);
 				a=WaitForMultipleObjects(NbrePool,ThreadPoolFree,FALSE,INFINITE);
 				EnterCriticalSection(&CriticalSection);
-				nPool=(int16_t)(a-WAIT_OBJECT_0);
+				nPool=(int8_t)(a-WAIT_OBJECT_0);
 				PoolFree=!ThreadPoolRequested[nPool];
 			}
 		}
@@ -387,22 +384,45 @@ bool ThreadPoolInterface::RequestThreadPool(uint16_t UserId,uint8_t thread_numbe
 
 	if (thread_number>ptrPool[nPool]->GetCurrentThreadAllocated())
 	{
-		ThreadPoolRequestUserIndex=-1;
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
-	while (ThreadPoolRequested[nPool])
+	if ((!Exclusive) || (NbrePool==1))
 	{
-		LeaveCriticalSection(&CriticalSection);
-		WaitForSingleObject(ThreadPoolFree[nPool],INFINITE);
-		EnterCriticalSection(&CriticalSection);
+		while (ThreadPoolRequested[nPool])
+		{
+			LeaveCriticalSection(&CriticalSection);
+			WaitForSingleObject(ThreadPoolFree[nPool],INFINITE);
+			EnterCriticalSection(&CriticalSection);
+		}
+	}
+	else
+	{
+		bool PoolFree=false;
+
+		while (!PoolFree)
+		{
+			LeaveCriticalSection(&CriticalSection);
+			WaitForMultipleObjects(NbrePool,ThreadPoolFree,TRUE,INFINITE);
+			EnterCriticalSection(&CriticalSection);
+			PoolFree=true;
+			for(uint8_t i=0; i<NbrePool; i++)
+				PoolFree=PoolFree && (!ThreadPoolRequested[i]);
+		}
 	}
 
 	bool out=ptrPool[nPool]->RequestThreadPool(thread_number,Data);
 
-	if (out) TabId[ThreadPoolRequestUserIndex].nPool=(int8_t)nPool;
-	else ThreadPoolRequestUserIndex=-1;
+	if (out)
+	{
+		if (Exclusive)
+		{
+			ExclusiveMode=true;
+			ResetEvent(EndExclusive);
+		}
+		TabId[userindex].nPool=(int8_t)nPool;
+	}
 
 	LeaveCriticalSection(&CriticalSection);
 
@@ -416,14 +436,34 @@ bool ThreadPoolInterface::ReleaseThreadPool(uint16_t UserId)
 
 	EnterCriticalSection(&CriticalSection);
 
-	if ((ThreadPoolRequestUserIndex==-1) || (TabId[ThreadPoolRequestUserIndex].UserId!=UserId)
-		|| (TabId[ThreadPoolRequestUserIndex].nPool<0) || (TabId[ThreadPoolRequestUserIndex].nPool>=NbrePool))
+	if (UserId==0)
 	{
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
-	uint8_t nPool=TabId[ThreadPoolRequestUserIndex].nPool;
+	uint16_t index=0;
+
+	while ((NbreUsers>index) && (TabId[index].UserId!=UserId)) index++;
+	if (index==NbreUsers)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
+
+	if (TabId[index].nPool<0)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(true);
+	}
+
+	uint8_t nPool=(uint8_t)(TabId[index].nPool);
+
+	if (nPool>=NbrePool)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
 
 	bool out=true;
 
@@ -436,8 +476,13 @@ bool ThreadPoolInterface::ReleaseThreadPool(uint16_t UserId)
 			EnterCriticalSection(&CriticalSection);
 		}
 		out=ptrPool[nPool]->ReleaseThreadPool();
-		TabId[ThreadPoolRequestUserIndex].nPool=-1;
-		ThreadPoolRequestUserIndex=-1;
+		TabId[index].nPool=-1;
+	}
+
+	if (ExclusiveMode)
+	{
+		ExclusiveMode=false;
+		SetEvent(EndExclusive);
 	}
 
 	LeaveCriticalSection(&CriticalSection);
@@ -452,14 +497,34 @@ bool ThreadPoolInterface::StartThreads(uint16_t UserId)
 
 	EnterCriticalSection(&CriticalSection);
 
-	if ((ThreadPoolRequestUserIndex==-1) || (TabId[ThreadPoolRequestUserIndex].UserId!=UserId)
-		|| (TabId[ThreadPoolRequestUserIndex].nPool<0) || (TabId[ThreadPoolRequestUserIndex].nPool>=NbrePool))
+	if (UserId==0)
 	{
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
-	uint8_t nPool=TabId[ThreadPoolRequestUserIndex].nPool;
+	uint16_t index=0;
+
+	while ((NbreUsers>index) && (TabId[index].UserId!=UserId)) index++;
+	if (index==NbreUsers)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
+
+	if (TabId[index].nPool<0)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
+
+	uint8_t nPool=(uint8_t)(TabId[index].nPool);
+
+	if (nPool>=NbrePool)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
 
 	if (!ThreadPoolRequested[nPool])
 	{
@@ -487,14 +552,34 @@ bool ThreadPoolInterface::WaitThreadsEnd(uint16_t UserId)
 
 	EnterCriticalSection(&CriticalSection);
 
-	if ((ThreadPoolRequestUserIndex==-1) || (TabId[ThreadPoolRequestUserIndex].UserId!=UserId)
-		|| (TabId[ThreadPoolRequestUserIndex].nPool<0) || (TabId[ThreadPoolRequestUserIndex].nPool>=NbrePool))
+	if (UserId==0)
 	{
 		LeaveCriticalSection(&CriticalSection);
 		return(false);
 	}
 
-	uint8_t nPool=TabId[ThreadPoolRequestUserIndex].nPool;
+	uint16_t index=0;
+
+	while ((NbreUsers>index) && (TabId[index].UserId!=UserId)) index++;
+	if (index==NbreUsers)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
+
+	if (TabId[index].nPool<0)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
+
+	uint8_t nPool=(uint8_t)(TabId[index].nPool);
+
+	if (nPool>=NbrePool)
+	{
+		LeaveCriticalSection(&CriticalSection);
+		return(false);
+	}
 
 	if (!ThreadPoolRequested[nPool])
 	{
@@ -516,13 +601,13 @@ bool ThreadPoolInterface::WaitThreadsEnd(uint16_t UserId)
 }
 
 
-bool ThreadPoolInterface::GetThreadPoolStatus(uint16_t UserId,int16_t nPool)
+bool ThreadPoolInterface::GetThreadPoolStatus(uint16_t UserId,int8_t nPool)
 {
-	if ((NbrePool>0) && Status_Ok)
+	if (Status_Ok && (NbrePool>0))
 	{
 		if ((UserId==0) || (NbreUsers==0))
 		{
-			if ((nPool>=0) && (nPool<NbrePool)) return(ptrPool[nPool]->GetThreadPoolStatus());
+			if ((nPool>=0) && (nPool<(int8_t)NbrePool)) return(ptrPool[nPool]->GetThreadPoolStatus());
 			else return(false);
 		}
 		else
@@ -532,10 +617,10 @@ bool ThreadPoolInterface::GetThreadPoolStatus(uint16_t UserId,int16_t nPool)
 			while ((NbreUsers>i) && (TabId[i].UserId!=UserId)) i++;
 			if (i==NbreUsers)
 			{
-				if ((nPool>=0) && (nPool<NbrePool)) return(ptrPool[nPool]->GetThreadPoolStatus());
+				if ((nPool>=0) && (nPool<(int8_t)NbrePool)) return(ptrPool[nPool]->GetThreadPoolStatus());
 				else return(false);
 			}
-			if ((TabId[i].nPool>=0) && (TabId[i].nPool<NbrePool))
+			if ((TabId[i].nPool>=0) && (TabId[i].nPool<(int8_t)NbrePool))
 				return(ptrPool[TabId[i].nPool]->GetThreadPoolStatus());
 			else return(false);		
 		}
@@ -544,13 +629,13 @@ bool ThreadPoolInterface::GetThreadPoolStatus(uint16_t UserId,int16_t nPool)
 }
 
 
-uint8_t ThreadPoolInterface::GetCurrentThreadAllocated(uint16_t UserId,int16_t nPool)
+uint8_t ThreadPoolInterface::GetCurrentThreadAllocated(uint16_t UserId,int8_t nPool)
 {
-	if ((NbrePool>0) && Status_Ok)
+	if (Status_Ok && (NbrePool>0))
 	{
 		if ((UserId==0) || (NbreUsers==0))
 		{
-			if ((nPool>=0) && (nPool<NbrePool)) return(ptrPool[nPool]->GetCurrentThreadAllocated());
+			if ((nPool>=0) && (nPool<(int8_t)NbrePool)) return(ptrPool[nPool]->GetCurrentThreadAllocated());
 			else return(0);
 		}
 		else
@@ -560,10 +645,10 @@ uint8_t ThreadPoolInterface::GetCurrentThreadAllocated(uint16_t UserId,int16_t n
 			while ((NbreUsers>i) && (TabId[i].UserId!=UserId)) i++;
 			if (i==NbreUsers)
 			{
-				if ((nPool>=0) && (nPool<NbrePool)) return(ptrPool[nPool]->GetCurrentThreadAllocated());
+				if ((nPool>=0) && (nPool<(int8_t)NbrePool)) return(ptrPool[nPool]->GetCurrentThreadAllocated());
 				else return(0);
 			}
-			if ((TabId[i].nPool>=0) && (TabId[i].nPool<NbrePool))
+			if ((TabId[i].nPool>=0) && (TabId[i].nPool<(int8_t)NbrePool))
 				return(ptrPool[TabId[i].nPool]->GetCurrentThreadAllocated());
 			else return(0);		
 		}
@@ -572,13 +657,13 @@ uint8_t ThreadPoolInterface::GetCurrentThreadAllocated(uint16_t UserId,int16_t n
 }
 
 
-uint8_t ThreadPoolInterface::GetCurrentThreadUsed(uint16_t UserId,int16_t nPool)
+uint8_t ThreadPoolInterface::GetCurrentThreadUsed(uint16_t UserId,int8_t nPool)
 {
-	if ((NbrePool>0) && Status_Ok)
+	if (Status_Ok && (NbrePool>0))
 	{
 		if ((UserId==0) || (NbreUsers==0))
 		{
-			if ((nPool>=0) && (nPool<NbrePool)) return(ptrPool[nPool]->GetCurrentThreadUsed());
+			if ((nPool>=0) && (nPool<(int8_t)NbrePool)) return(ptrPool[nPool]->GetCurrentThreadUsed());
 			else return(0);
 		}
 		else
@@ -588,10 +673,10 @@ uint8_t ThreadPoolInterface::GetCurrentThreadUsed(uint16_t UserId,int16_t nPool)
 			while ((NbreUsers>i) && (TabId[i].UserId!=UserId)) i++;
 			if (i==NbreUsers)
 			{
-				if ((nPool>=0) && (nPool<NbrePool)) return(ptrPool[nPool]->GetCurrentThreadUsed());
+				if ((nPool>=0) && (nPool<(int8_t)NbrePool)) return(ptrPool[nPool]->GetCurrentThreadUsed());
 				else return(0);
 			}
-			if ((TabId[i].nPool>=0) && (TabId[i].nPool<NbrePool))
+			if ((TabId[i].nPool>=0) && (TabId[i].nPool<(int8_t)NbrePool))
 				return(ptrPool[TabId[i].nPool]->GetCurrentThreadUsed());
 			else return(0);		
 		}
@@ -602,14 +687,14 @@ uint8_t ThreadPoolInterface::GetCurrentThreadUsed(uint16_t UserId,int16_t nPool)
 
 uint8_t ThreadPoolInterface::GetLogicalCPUNumber(void)
 {
-	if ((NbrePool>0) && Status_Ok) return(ptrPool[0]->GetLogicalCPUNumber());
+	if (Status_Ok && (NbrePool>0)) return(ptrPool[0]->GetLogicalCPUNumber());
 	else return(0);
 }
 
 
 uint8_t ThreadPoolInterface::GetPhysicalCoreNumber(void)
 {
-	if ((NbrePool>0) && Status_Ok) return(ptrPool[0]->GetPhysicalCoreNumber());
+	if (Status_Ok && (NbrePool>0)) return(ptrPool[0]->GetPhysicalCoreNumber());
 	else return(0);
 }
 

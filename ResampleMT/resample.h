@@ -89,7 +89,7 @@ private:
 	BOOL CSectionOk;
 	
 	ThreadPoolFunction ResampleH_MT;
-	ThreadPoolInterface& poolInterface;
+	ThreadPoolInterface *poolInterface;
 
 	static void StaticThreadpoolH(void *ptr);
 
@@ -147,7 +147,7 @@ private:
 	BOOL CSectionOk;
 
 	ThreadPoolFunction ResampleV_MT;
-	ThreadPoolInterface& poolInterface;
+	ThreadPoolInterface *poolInterface;
 
 	static void StaticThreadpoolV(void *ptr);
 

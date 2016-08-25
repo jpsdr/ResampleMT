@@ -34,7 +34,7 @@ class ThreadPool
 	public :
 
 	uint8_t GetThreadNumber(uint8_t thread_number,bool logical);
-	bool AllocateThreads(uint8_t thread_number,uint8_t offset);
+	bool AllocateThreads(uint8_t thread_number,uint8_t offset_core,uint8_t offset_ht,bool UseMaxPhysCore);
 	bool DeAllocateThreads(void);
 	bool RequestThreadPool(uint8_t thread_number,Public_MT_Data_Thread *Data);
 	bool ReleaseThreadPool(void);
@@ -62,7 +62,7 @@ class ThreadPool
 	uint8_t TotalThreadsRequested,CurrentThreadsAllocated,CurrentThreadsUsed;
 	
 	void FreeThreadPool(void);
-	void CreateThreadPool(uint8_t offset);
+	void CreateThreadPool(uint8_t offset_core,uint8_t offset_ht,bool UseMaxPhysCore);
 
 	private :
 
