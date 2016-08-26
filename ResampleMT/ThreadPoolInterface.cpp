@@ -4,9 +4,6 @@
 #include "ThreadPoolInterface.h"
 #include "ThreadPool.h"
 
-#define VERSION "ThreadPoolInterface 1.0.1"
-
-
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
 #define mydelete(ptr) if (ptr!=NULL) { delete ptr; ptr=NULL;}

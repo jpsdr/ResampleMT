@@ -5,6 +5,8 @@
 
 #include "ThreadPoolDef.h"
 
+#define THREADPOOL_VERSION "ThreadPool 1.1.0"
+
 typedef struct _MT_Data_Thread
 {
 	Public_MT_Data_Thread *MTData;

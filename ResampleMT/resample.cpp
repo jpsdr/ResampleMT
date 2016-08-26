@@ -37,14 +37,13 @@
 #include "avs/config.h"
 #include "avs/alignment.h"
 
-#define VERSION "ResampleMT 1.2.1 JPSDR"
-
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
 
 // Intrinsics for SSE4.1, SSSE3, SSE3, SSE2, ISSE and MMX
 #include <smmintrin.h>
 
+static ThreadPoolInterface *poolInterface;
 
 /***************************************
  ********* Templated SSE Loader ********
@@ -830,8 +829,6 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	UserId=0;
 	CSectionOk=FALSE;
 
-	poolInterface=ThreadPoolInterface::Init(1);
-
 	if (!poolInterface->GetThreadPoolInterfaceStatus()) env->ThrowError("ResizeHMT: Error with the TheadPool status !");
 
 	if (vi.height>=32)
@@ -1299,8 +1296,6 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	}
 	UserId=0;
 	CSectionOk=FALSE;
-
-	poolInterface=ThreadPoolInterface::Init(1);
 
 	if (!poolInterface->GetThreadPoolInterfaceStatus()) env->ThrowError("ResizeVMT: Error with the TheadPool status !");
 
@@ -2359,12 +2354,14 @@ AVSValue __cdecl FilteredResizeMT::Create_SincResize(AVSValue args, void*, IScri
 }
 
 
-const AVS_Linkage *AVS_linkage = nullptr;
 
+const AVS_Linkage *AVS_linkage = nullptr;
 
 extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors)
 {
 	AVS_linkage = vectors;
+
+	poolInterface=ThreadPoolInterface::Init(1);
 
 	env->AddFunction("PointResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
 		FilteredResizeMT::Create_PointResize, 0);
@@ -2389,7 +2386,6 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 	env->AddFunction("SincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i",
 		FilteredResizeMT::Create_SincResize, 0);
 
-	return "ResizeMT plugin";
-	
+	return "ResizeMT plugin";	
 }
 

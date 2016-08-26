@@ -3,9 +3,6 @@
 
 #include "ThreadPool.h"
 
-#define VERSION "ThreadPool 1.1.0"
-
-
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
 
