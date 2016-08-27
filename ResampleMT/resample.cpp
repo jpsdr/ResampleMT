@@ -1173,22 +1173,19 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		f_proc=1;
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=f_proc;
-		poolInterface->StartThreads(UserId);
-		poolInterface->WaitThreadsEnd(UserId);
+		if (poolInterface->StartThreads(UserId)) poolInterface->WaitThreadsEnd(UserId);
 
 		if (!grey && vi.IsPlanar())
 		{
 			f_proc=2;
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			poolInterface->StartThreads(UserId);
-			poolInterface->WaitThreadsEnd(UserId);
+			if (poolInterface->StartThreads(UserId)) poolInterface->WaitThreadsEnd(UserId);
 
 			f_proc=3;
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			poolInterface->StartThreads(UserId);
-			poolInterface->WaitThreadsEnd(UserId);
+			if (poolInterface->StartThreads(UserId)) poolInterface->WaitThreadsEnd(UserId);
 
 		}
 
@@ -1722,8 +1719,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 		for(uint8_t i=0; i<threads_number; i++)
 			MT_Thread[i].f_process=f_proc;
-		poolInterface->StartThreads(UserId);
-		poolInterface->WaitThreadsEnd(UserId);
+		if (poolInterface->StartThreads(UserId)) poolInterface->WaitThreadsEnd(UserId);
 
 		if (!vi.IsY8() && vi.IsPlanar())
 		{
@@ -1732,16 +1728,14 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			poolInterface->StartThreads(UserId);
-			poolInterface->WaitThreadsEnd(UserId);
+			if (poolInterface->StartThreads(UserId)) poolInterface->WaitThreadsEnd(UserId);
 
 			if (IsPtrAligned(srcp_V, 16) && (src_pitch_V & 15) == 0) f_proc=5;
 			else f_proc=6;
 
 			for(uint8_t i=0; i<threads_number; i++)
 				MT_Thread[i].f_process=f_proc;
-			poolInterface->StartThreads(UserId);
-			poolInterface->WaitThreadsEnd(UserId);
+			if (poolInterface->StartThreads(UserId)) poolInterface->WaitThreadsEnd(UserId);
 		}
 
 		for(uint8_t i=0; i<threads_number; i++)

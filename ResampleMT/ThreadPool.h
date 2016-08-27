@@ -5,7 +5,7 @@
 
 #include "ThreadPoolDef.h"
 
-#define THREADPOOL_VERSION "ThreadPool 1.1.0"
+#define THREADPOOL_VERSION "ThreadPool 1.1.1"
 
 typedef struct _MT_Data_Thread
 {
@@ -26,8 +26,7 @@ typedef struct _Arch_CPU
 class ThreadPool
 {
 	public :
-
-	ThreadPool(HANDLE _JobsEnded, HANDLE _ThreadPoolFree,bool *_ThreadPoolRequested, bool *_JobsRunning);
+	ThreadPool(void);
 
 	protected :
 
@@ -50,17 +49,13 @@ class ThreadPool
 
 	protected :
 
-	ThreadPool(void);
-
 	MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	HANDLE nextJob[MAX_MT_THREADS],jobFinished[MAX_MT_THREADS];
 	HANDLE thds[MAX_MT_THREADS];
 	DWORD tids[MAX_MT_THREADS];
 	ULONG_PTR ThreadMask[MAX_MT_THREADS];
-	HANDLE JobsEnded,ThreadPoolFree;
 
 	bool Status_Ok;
-	bool *ThreadPoolRequested,*JobsRunning;
 	uint8_t TotalThreadsRequested,CurrentThreadsAllocated,CurrentThreadsUsed;
 	
 	void FreeThreadPool(void);

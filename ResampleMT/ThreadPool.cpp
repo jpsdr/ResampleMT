@@ -202,9 +202,7 @@ DWORD WINAPI ThreadPool::StaticThreadpool(LPVOID lpParam )
 
 
 
-ThreadPool::ThreadPool(HANDLE _JobsEnded, HANDLE _ThreadPoolFree,bool *_ThreadPoolRequested, bool *_JobsRunning):
-Status_Ok(true),JobsEnded(_JobsEnded),ThreadPoolFree(_ThreadPoolFree),
-JobsRunning(_JobsRunning),ThreadPoolRequested(_ThreadPoolRequested)
+ThreadPool::ThreadPool(void): Status_Ok(true)
 {
 	int16_t i;
 
@@ -222,21 +220,9 @@ JobsRunning(_JobsRunning),ThreadPoolRequested(_ThreadPoolRequested)
 	TotalThreadsRequested=0;
 	CurrentThreadsAllocated=0;
 	CurrentThreadsUsed=0;
-	*JobsRunning=false;
-	*ThreadPoolRequested=false;
 
 	Get_CPU_Info(CPU);
-	if ((CPU.NbLogicCPU==0) || (CPU.NbPhysCore==0))
-	{
-		Status_Ok=false;
-		return;
-	}
-
-	if ((JobsEnded==NULL) || (ThreadPoolFree==NULL))
-	{
-		Status_Ok=false;
-		return;
-	}
+	if ((CPU.NbLogicCPU==0) || (CPU.NbPhysCore==0)) Status_Ok=false;
 }
 
 
@@ -245,28 +231,29 @@ void ThreadPool::FreeThreadPool(void)
 {
 	int16_t i;
 
-	for (i=TotalThreadsRequested-1; i>=0; i--)
+	if (TotalThreadsRequested>0)
 	{
-		if (thds[i]!=NULL)
+		for (i=TotalThreadsRequested-1; i>=0; i--)
 		{
-			MT_Thread[i].f_process=255;
-			SetEvent(nextJob[i]);
-			WaitForSingleObject(thds[i],INFINITE);
-			myCloseHandle(thds[i]);
+			if (thds[i]!=NULL)
+			{
+				MT_Thread[i].f_process=255;
+				SetEvent(nextJob[i]);
+				WaitForSingleObject(thds[i],INFINITE);
+				myCloseHandle(thds[i]);
+			}
 		}
-	}
 
-	for (i=TotalThreadsRequested-1; i>=0; i--)
-	{
-		myCloseHandle(nextJob[i]);
-		myCloseHandle(jobFinished[i]);
+		for (i=TotalThreadsRequested-1; i>=0; i--)
+		{
+			myCloseHandle(nextJob[i]);
+			myCloseHandle(jobFinished[i]);
+		}
 	}
 
 	TotalThreadsRequested=0;
 	CurrentThreadsAllocated=0;
 	CurrentThreadsUsed=0;
-	*JobsRunning=false;
-	*ThreadPoolRequested=false;
 }
 
 
@@ -287,10 +274,9 @@ bool ThreadPool::AllocateThreads(uint8_t thread_number,uint8_t offset_core,uint8
 	{
 		TotalThreadsRequested=thread_number;
 		CreateThreadPool(offset_core,offset_ht,UseMaxPhysCore);
-		if (!Status_Ok) return(false);
 	}
 
-	return(true);
+	return(Status_Ok);
 }
 
 
@@ -365,14 +351,11 @@ void ThreadPool::CreateThreadPool(uint8_t offset_core,uint8_t offset_ht,bool Use
 bool ThreadPool::RequestThreadPool(uint8_t thread_number,Public_MT_Data_Thread *Data)
 {
 	if ((!Status_Ok) || (thread_number>CurrentThreadsAllocated)) return(false);
-
+	
 	for(uint8_t i=0; i<thread_number; i++)
 		MT_Thread[i].MTData=Data+i;
-
+	
 	CurrentThreadsUsed=thread_number;
-
-	*ThreadPoolRequested=true;
-	ResetEvent(ThreadPoolFree);
 
 	return(true);	
 }
@@ -382,14 +365,9 @@ bool ThreadPool::ReleaseThreadPool(void)
 {
 	if (!Status_Ok) return(false);
 
-	if (*ThreadPoolRequested)
-	{
-		for(uint8_t i=0; i<CurrentThreadsUsed; i++)
-			MT_Thread[i].MTData=NULL;
-		CurrentThreadsUsed=0;
-		*ThreadPoolRequested=false;
-		SetEvent(ThreadPoolFree);
-	}
+	for(uint8_t i=0; i<CurrentThreadsUsed; i++)
+		MT_Thread[i].MTData=NULL;
+	CurrentThreadsUsed=0;
 
 	return(true);
 }
@@ -397,12 +375,7 @@ bool ThreadPool::ReleaseThreadPool(void)
 
 bool ThreadPool::StartThreads(void)
 {
-	if ((!Status_Ok) || (!*ThreadPoolRequested) || (CurrentThreadsUsed==0)) return(false);
-
-	if (*JobsRunning) return(true);
-
-	*JobsRunning=true;
-	ResetEvent(JobsEnded);
+	if ((!Status_Ok) || (CurrentThreadsUsed==0)) return(false);
 
 	for(uint8_t i=0; i<CurrentThreadsUsed; i++)
 	{
@@ -417,17 +390,12 @@ bool ThreadPool::StartThreads(void)
 
 bool ThreadPool::WaitThreadsEnd(void)
 {
-	if ((!Status_Ok) || (!*ThreadPoolRequested) || (CurrentThreadsUsed==0)) return(false);
-
-	if (!*JobsRunning) return(true);
+	if ((!Status_Ok) || (CurrentThreadsUsed==0)) return(false);
 
 	WaitForMultipleObjects(CurrentThreadsUsed,jobFinished,TRUE,INFINITE);
 
 	for(uint8_t i=0; i<CurrentThreadsUsed; i++)
 		MT_Thread[i].f_process=0;
-
-	*JobsRunning=false;
-	SetEvent(JobsEnded);
 
 	return(true);
 }
