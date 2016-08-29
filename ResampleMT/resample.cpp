@@ -1245,7 +1245,11 @@ void FilteredResizeH::FreeData(void)
   myalignedfree(filter_storage_luma);
   myalignedfree(filter_storage_chroma);
 
-  if (CSectionOk==TRUE) DeleteCriticalSection(&CriticalSection);
+  if (CSectionOk==TRUE)
+  {
+	  DeleteCriticalSection(&CriticalSection);
+	  CSectionOk=FALSE;
+  }
 }
 
 FilteredResizeH::~FilteredResizeH(void)
@@ -1848,7 +1852,11 @@ void FilteredResizeV::FreeData(void)
   myalignedfree(filter_storage_chroma_aligned);
   myalignedfree(filter_storage_chroma_unaligned);
 
-  if (CSectionOk==TRUE) DeleteCriticalSection(&CriticalSection);
+  if (CSectionOk==TRUE)
+  {
+	  DeleteCriticalSection(&CriticalSection);
+	  CSectionOk=FALSE;
+  }
 }
 
 
