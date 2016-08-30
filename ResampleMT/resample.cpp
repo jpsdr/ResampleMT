@@ -1139,10 +1139,7 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
   if (threads_number>1)
   {
 	if (!poolInterface->RequestThreadPool(UserId,threads_number,MT_Thread,0,false))
-	{
-		FreeData();
 		env->ThrowError("ResizeHMT: Error with the TheadPool while requesting threadpool !");
-	}
   }
   
 	for(uint8_t i=0; i<threads_number; i++)
@@ -1674,10 +1671,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
   if (threads_number>1)
   {
 	if (!poolInterface->RequestThreadPool(UserId,threads_number,MT_Thread,0,false))
-	{
-		FreeData();
 		env->ThrowError("ResizeHMT: Error with the TheadPool while requesting threadpool !");
-	}
   }
 
 	for(uint8_t i=0; i<threads_number; i++)
