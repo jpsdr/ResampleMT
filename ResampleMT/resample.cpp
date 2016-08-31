@@ -871,11 +871,14 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 
   if (!grey) resampler_h_chroma = GetResampler(env->GetCPUFlags(), true, pixelsize, resampling_program_chroma,env);
 
+  if (threads_number>1)
+  {
 	if (!poolInterface->AllocateThreads(UserId,threads_number,0,0,true,0))
 	{
 		FreeData();
 		env->ThrowError("ResizeHMT: Error with the TheadPool while allocating threadpool !");
 	}
+  }
   
   // Change target video info size
   vi.width = target_width;
@@ -1241,18 +1244,17 @@ void FilteredResizeH::FreeData(void)
 	
   myalignedfree(filter_storage_luma);
   myalignedfree(filter_storage_chroma);
+}
 
+FilteredResizeH::~FilteredResizeH(void)
+{
+	if (threads_number>1) poolInterface->DeAllocateThreads(UserId);
+	FreeData();
   if (CSectionOk==TRUE)
   {
 	  DeleteCriticalSection(&CriticalSection);
 	  CSectionOk=FALSE;
   }
-}
-
-FilteredResizeH::~FilteredResizeH(void)
-{
-	poolInterface->DeAllocateThreads(UserId);
-	FreeData();
 }
 
 
@@ -1350,11 +1352,14 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     resampler_chroma_unaligned = GetResampler(env->GetCPUFlags(), false,pixelsize, filter_storage_chroma_unaligned, resampling_program_chroma);
   }
 
+  if (threads_number>1)
+  {
 	if (!poolInterface->AllocateThreads(UserId,threads_number,0,0,true,0))
 	{
 		FreeData();
 		env->ThrowError("ResizeVMT: Error with the TheadPool while allocating threadpool !");
 	}
+  }
 
   // Change target video info size
   vi.height = target_height;
@@ -1845,19 +1850,18 @@ void FilteredResizeV::FreeData(void)
   myalignedfree(filter_storage_luma_unaligned);
   myalignedfree(filter_storage_chroma_aligned);
   myalignedfree(filter_storage_chroma_unaligned);
-
-  if (CSectionOk==TRUE)
-  {
-	  DeleteCriticalSection(&CriticalSection);
-	  CSectionOk=FALSE;
-  }
 }
 
 
 FilteredResizeV::~FilteredResizeV(void)
 {
-	poolInterface->DeAllocateThreads(UserId);
+	if (threads_number>1) poolInterface->DeAllocateThreads(UserId);
 	FreeData();
+  if (CSectionOk==TRUE)
+  {
+	  DeleteCriticalSection(&CriticalSection);
+	  CSectionOk=FALSE;
+  }
 }
 
 
