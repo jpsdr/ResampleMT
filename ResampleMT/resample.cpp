@@ -792,11 +792,13 @@ static void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src
 
 
 FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double subrange_width,
-                                  int target_width, int _threads, bool _avsp, ResamplingFunction* func, IScriptEnvironment* env )
+	int target_width, int _threads, bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+	bool _avsp, ResamplingFunction* func, IScriptEnvironment* env )
   : GenericVideoFilter(_child),
   resampling_program_luma(NULL), resampling_program_chroma(NULL),
   filter_storage_luma(NULL), filter_storage_chroma(NULL),
-  threads(_threads),avsp(_avsp)
+  threads(_threads),LogicalCores(_LogicalCores),MaxPhysCores(_MaxPhysCores),SetAffinity(_SetAffinity),
+  avsp(_avsp)
 {
   src_width  = vi.width;
   src_height = vi.height;
@@ -833,7 +835,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 
 	if (vi.height>=32)
 	{
-		threads_number=poolInterface->GetThreadNumber(threads,false);
+		threads_number=poolInterface->GetThreadNumber(threads,LogicalCores);
 		if (threads_number==0)
 			env->ThrowError("ResizeHMT: Error with the TheadPool while getting CPU info !");
 	}
@@ -873,7 +875,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 
   if (threads_number>1)
   {
-	if (!poolInterface->AllocateThreads(UserId,threads_number,0,0,true,0))
+	if (!poolInterface->AllocateThreads(UserId,threads_number,0,0,MaxPhysCores,SetAffinity,0))
 	{
 		FreeData();
 		env->ThrowError("ResizeHMT: Error with the TheadPool while allocating threadpool !");
@@ -1262,14 +1264,16 @@ FilteredResizeH::~FilteredResizeH(void)
  ***** Filtered Resize - Vertical ******
  ***************************************/
 
-FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subrange_height,
-                                  int target_height, int _threads, bool _avsp, ResamplingFunction* func, IScriptEnvironment* env )
+FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subrange_height, int target_height,
+	int _threads,  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity, bool _avsp,
+	ResamplingFunction* func, IScriptEnvironment* env )
   : GenericVideoFilter(_child),
     resampling_program_luma(NULL), resampling_program_chroma(NULL),
     src_pitch_table_luma(NULL), src_pitch_table_chromaU(NULL), src_pitch_table_chromaV(NULL),
     src_pitch_luma(-1), src_pitch_chromaU(-1), src_pitch_chromaV(-1),
     filter_storage_luma_aligned(NULL), filter_storage_luma_unaligned(NULL),
     filter_storage_chroma_aligned(NULL), filter_storage_chroma_unaligned(NULL),
+	LogicalCores(_LogicalCores),MaxPhysCores(_MaxPhysCores),SetAffinity(_SetAffinity),
 	threads(_threads),avsp(_avsp)
 {
 	int16_t i;
@@ -1301,7 +1305,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 
 	if (vi.height>=32)
 	{
-		threads_number=poolInterface->GetThreadNumber(threads,false);
+		threads_number=poolInterface->GetThreadNumber(threads,LogicalCores);
 		if (threads_number==0)
 			env->ThrowError("ResizeVMT: Error with the TheadPool while getting CPU info !");
 	}
@@ -1354,7 +1358,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 
   if (threads_number>1)
   {
-	if (!poolInterface->AllocateThreads(UserId,threads_number,0,0,true,0))
+	if (!poolInterface->AllocateThreads(UserId,threads_number,0,0,MaxPhysCores,SetAffinity,0))
 	{
 		FreeData();
 		env->ThrowError("ResizeVMT: Error with the TheadPool while allocating threadpool !");
@@ -1871,21 +1875,25 @@ FilteredResizeV::~FilteredResizeV(void)
 
 
 PClip FilteredResizeMT::CreateResizeV(PClip clip, double subrange_top, double subrange_height, int target_height,
-                    int _threads,bool _avsp,ResamplingFunction* func, IScriptEnvironment* env)
+                    int _threads,bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+					bool _avsp,ResamplingFunction* func, IScriptEnvironment* env)
 {
-  return new FilteredResizeV(clip, subrange_top, subrange_height, target_height,_threads,_avsp,func, env);
+  return new FilteredResizeV(clip, subrange_top, subrange_height, target_height,_threads,
+	  _LogicalCores,_MaxPhysCores,_SetAffinity,_avsp,func, env);
 }
 
 
 PClip FilteredResizeMT::CreateResizeH(PClip clip, double subrange_top, double subrange_height, int target_height,
-                    int _threads,bool _avsp,ResamplingFunction* func, IScriptEnvironment* env)
+                    int _threads,bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+					bool _avsp,ResamplingFunction* func, IScriptEnvironment* env)
 {
-  return new FilteredResizeH(clip, subrange_top, subrange_height, target_height,_threads,_avsp,func, env);
+  return new FilteredResizeH(clip, subrange_top, subrange_height, target_height,_threads,
+	  _LogicalCores,_MaxPhysCores,_SetAffinity,_avsp,func, env);
 }
 
 
 PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_height,int _threads,
-	const AVSValue* args,ResamplingFunction* f, IScriptEnvironment* env)
+	bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,const AVSValue* args,ResamplingFunction* f, IScriptEnvironment* env)
 {
   const VideoInfo& vi = clip->GetVideoInfo();
   const double subrange_left = args[0].AsFloat(0), subrange_top = args[1].AsFloat(0);
@@ -1967,9 +1975,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					  AVSValue sargs[6] = {clip,0,int(subrange_top),vi.width,int(subrange_height),0};
 					  result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 				}
-				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads, avsp, f, env);
+				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity, avsp, f, env);
 			}
-			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads,avsp, f, env);
+			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 		}
 		if (!((subrange_left==0) && (subrange_width==target_width) && (subrange_width==vi.width)))
 		{
@@ -2000,9 +2008,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							v = env->Invoke(turnRightFunction,v).AsClip();
 							vu = env->Invoke(turnRightFunction,vu).AsClip();
 							vv = env->Invoke(turnRightFunction,vv).AsClip();
-							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,avsp, f, env);
-							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
-							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
+							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							v = env->Invoke(turnLeftFunction,v).AsClip();
 							vu = env->Invoke(turnLeftFunction,vu).AsClip();
 							vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2014,14 +2022,14 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						else
 						{
 							result=env->Invoke(turnRightFunction,result).AsClip();
-							result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+							result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							result=env->Invoke(turnLeftFunction,result).AsClip();
 						}
 					}
 					else
 					{
 						result=env->Invoke(turnRightFunction,result).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						result=env->Invoke(turnLeftFunction,result).AsClip();
 					}
 				}
@@ -2043,9 +2051,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						v = env->Invoke(turnRightFunction,v).AsClip();
 						vu = env->Invoke(turnRightFunction,vu).AsClip();
 						vv = env->Invoke(turnRightFunction,vv).AsClip();
-						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,avsp, f, env);
-						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
-						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
+						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						v = env->Invoke(turnLeftFunction,v).AsClip();
 						vu = env->Invoke(turnLeftFunction,vu).AsClip();
 						vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2057,14 +2065,14 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					else
 					{
 						result=env->Invoke(turnRightFunction,result).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						result=env->Invoke(turnLeftFunction,result).AsClip();
 					}
 				}
 				else
 				{
 					result=env->Invoke(turnRightFunction,result).AsClip();
-					result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+					result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 					result=env->Invoke(turnLeftFunction,result).AsClip();
 				}
 			}
@@ -2105,9 +2113,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							v = env->Invoke(turnRightFunction,v).AsClip();
 							vu = env->Invoke(turnRightFunction,vu).AsClip();
 							vv = env->Invoke(turnRightFunction,vv).AsClip();
-							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,avsp, f, env);
-							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
-							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
+							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							v = env->Invoke(turnLeftFunction,v).AsClip();
 							vu = env->Invoke(turnLeftFunction,vu).AsClip();
 							vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2119,14 +2127,14 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						else
 						{
 							result=env->Invoke(turnRightFunction,clip).AsClip();
-							result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+							result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							result=env->Invoke(turnLeftFunction,result).AsClip();
 						}
 					}
 					else
 					{
 						result=env->Invoke(turnRightFunction,clip).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						result=env->Invoke(turnLeftFunction,result).AsClip();
 					}
 				}
@@ -2148,9 +2156,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						v = env->Invoke(turnRightFunction,v).AsClip();
 						vu = env->Invoke(turnRightFunction,vu).AsClip();
 						vv = env->Invoke(turnRightFunction,vv).AsClip();
-						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,avsp, f, env);
-						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
-						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,avsp, f, env);
+						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						v = env->Invoke(turnLeftFunction,v).AsClip();
 						vu = env->Invoke(turnLeftFunction,vu).AsClip();
 						vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2162,14 +2170,14 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					else
 					{
 						result=env->Invoke(turnRightFunction,clip).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						result=env->Invoke(turnLeftFunction,result).AsClip();
 					}
 				}
 				else
 				{
 					result=env->Invoke(turnRightFunction,clip).AsClip();
-					result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+					result=CreateResizeV(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 					result=env->Invoke(turnLeftFunction,result).AsClip();
 				}
 			}
@@ -2186,9 +2194,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					  AVSValue sargs[6] = {result,0,int(subrange_top),vi.width,int(subrange_height),0};
 					  result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 				}
-				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,avsp, f, env);
+				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 			}
-			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,avsp, f, env);
+			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 		}
 	  }
   }
@@ -2210,9 +2218,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					  AVSValue sargs[6] = {clip,0,int(subrange_top),vi.width,int(subrange_height),0};
 					  result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 				}
-				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads, avsp, f, env);
+				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity, avsp, f, env);
 			}
-			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads,avsp, f, env);
+			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 		}
 		if (!((subrange_left==0) && (subrange_width==target_width) && (subrange_width==vi.width)))
 		{
@@ -2226,9 +2234,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 				  AVSValue sargs[6] = {result,int(subrange_left),0,int(subrange_width),vi.height,0};
 				  result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 				}
-				else result = CreateResizeH(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+				else result = CreateResizeH(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 			}
-			else result = CreateResizeH(result, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+			else result = CreateResizeH(result, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 		}
 	  }
 	  else
@@ -2247,9 +2255,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 				  AVSValue sargs[6] = {clip,int(subrange_left),0,int(subrange_width),vi.height,0};
 				  result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 				}
-				else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+				else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 			}
-			else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,_threads,avsp, f, env);
+			else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 		}
 
 		if (!((subrange_top==0) && (subrange_height==target_height) && (subrange_height==vi.height)))
@@ -2264,9 +2272,9 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					  AVSValue sargs[6] = {result,0,int(subrange_top),vi.width,int(subrange_height),0};
 					  result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 				}
-				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,avsp, f, env);
+				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 			}
-			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,avsp, f, env);
+			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 		}
 	  }
   }
@@ -2277,80 +2285,80 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 AVSValue __cdecl FilteredResizeMT::Create_PointResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   PointFilter f;
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0),
+	  args[8].AsBool(false),args[9].AsBool(true),args[10].AsBool(true),&args[3],&f, env );
 }
 
 
 AVSValue __cdecl FilteredResizeMT::Create_BilinearResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   TriangleFilter f;
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0),
+	  args[8].AsBool(false),args[9].AsBool(true),args[10].AsBool(true),&args[3],&f, env );
 }
 
 
 AVSValue __cdecl FilteredResizeMT::Create_BicubicResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   MitchellNetravaliFilter f(args[3].AsDblDef(1./3.), args[4].AsDblDef(1./3.));
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[9].AsInt(0), &args[5],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[9].AsInt(0),
+	  args[10].AsBool(false),args[11].AsBool(true),args[12].AsBool(true),&args[5],&f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_LanczosResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   LanczosFilter f(args[7].AsInt(3));
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0),
+	  args[9].AsBool(false),args[10].AsBool(true),args[11].AsBool(true),&args[3],&f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Lanczos4Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   LanczosFilter f(4);
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0),
+	  args[8].AsBool(false),args[9].AsBool(true),args[10].AsBool(true),&args[3], &f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_BlackmanResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   BlackmanFilter f(args[7].AsInt(4));
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0),
+	  args[9].AsBool(false),args[10].AsBool(true),args[11].AsBool(true),&args[3],&f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline16Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline16Filter f;
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0),
+	  args[8].AsBool(false),args[9].AsBool(true),args[10].AsBool(true),&args[3], &f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline36Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline36Filter f;
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0),
+	  args[8].AsBool(false),args[9].AsBool(true),args[10].AsBool(true),&args[3], &f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline64Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline64Filter f;
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[7].AsInt(0),
+	  args[8].AsBool(false),args[9].AsBool(true),args[10].AsBool(true),&args[3],&f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_GaussianResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   GaussianFilter f(args[7].AsFloat(30.0f));
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0),
+	  args[9].AsBool(false),args[10].AsBool(true),args[11].AsBool(true),&args[3],&f, env );
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_SincResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   SincFilter f(args[7].AsInt(4));
-  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0), &args[3],
-                       &f, env );
+  return CreateResize( args[0].AsClip(), args[1].AsInt(), args[2].AsInt(),args[8].AsInt(0),
+	  args[9].AsBool(false),args[10].AsBool(true),args[11].AsBool(true),&args[3], &f, env );
 }
 
 
@@ -2363,27 +2371,27 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 
 	poolInterface=ThreadPoolInterface::Init(1);
 
-	env->AddFunction("PointResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("PointResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_PointResize, 0);
-	env->AddFunction("BilinearResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("BilinearResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_BilinearResize, 0);
-	env->AddFunction("BicubicResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("BicubicResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_BicubicResize, 0);
-	env->AddFunction("LanczosResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i",
+	env->AddFunction("LanczosResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_LanczosResize, 0);
-	env->AddFunction("Lanczos4ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("Lanczos4ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_Lanczos4Resize, 0);
-	env->AddFunction("BlackmanResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i",
+	env->AddFunction("BlackmanResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_BlackmanResize, 0);
-	env->AddFunction("Spline16ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("Spline16ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_Spline16Resize, 0);
-	env->AddFunction("Spline36ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("Spline36ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_Spline36Resize, 0);
-	env->AddFunction("Spline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i",
+	env->AddFunction("Spline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_Spline64Resize, 0);
-	env->AddFunction("GaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[threads]i",
+	env->AddFunction("GaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_GaussianResize, 0);
-	env->AddFunction("SincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i",
+	env->AddFunction("SincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b",
 		FilteredResizeMT::Create_SincResize, 0);
 
 	return "ResizeMT plugin";	

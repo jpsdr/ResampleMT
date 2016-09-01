@@ -73,8 +73,8 @@ typedef struct _MT_Data_Info
 class FilteredResizeH : public GenericVideoFilter
 {
 public:
-  FilteredResizeH( PClip _child, double subrange_left, double subrange_width, int target_width, int _threads, bool _avsp, 
-                   ResamplingFunction* func, IScriptEnvironment* env );
+  FilteredResizeH( PClip _child, double subrange_left, double subrange_width, int target_width, int _threads,
+	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _avsp, ResamplingFunction* func, IScriptEnvironment* env );
   virtual ~FilteredResizeH(void);
   PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
@@ -86,6 +86,7 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
+	bool LogicalCores,MaxPhysCores,SetAffinity;
 	uint16_t UserId;
 	CRITICAL_SECTION CriticalSection;
 	BOOL CSectionOk;
@@ -130,8 +131,8 @@ private:
 class FilteredResizeV : public GenericVideoFilter
 {
 public:
-  FilteredResizeV( PClip _child, double subrange_top, double subrange_height, int target_height, int _threads, bool _avsp,
-		ResamplingFunction* func, IScriptEnvironment* env);
+  FilteredResizeV( PClip _child, double subrange_top, double subrange_height, int target_height, int _threads,
+	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _avsp,ResamplingFunction* func, IScriptEnvironment* env);
   virtual ~FilteredResizeV(void);
   PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
@@ -143,6 +144,7 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
+	bool LogicalCores,MaxPhysCores,SetAffinity;
 	uint16_t UserId;
 	CRITICAL_SECTION CriticalSection;
 	BOOL CSectionOk;
@@ -195,12 +197,15 @@ class FilteredResizeMT
 {
 public:
 static PClip CreateResizeV( PClip clip, double subrange_top, double subrange_height, int target_height, 
-                             int _threads, bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
+                             int _threads,bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+							 bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
 static PClip CreateResizeH( PClip clip, double subrange_top, double subrange_height, int target_height, 
-                             int _threads, bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
+                             int _threads, bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+							 bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
 
-static PClip CreateResize( PClip clip, int target_width, int target_height, int _threads, const AVSValue* args, 
-                           ResamplingFunction* f, IScriptEnvironment* env );
+static PClip CreateResize( PClip clip, int target_width, int target_height, int _threads,
+	bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+	const AVSValue* args, ResamplingFunction* f, IScriptEnvironment* env );
 
 static AVSValue __cdecl Create_PointResize(AVSValue args, void*, IScriptEnvironment* env);
 
