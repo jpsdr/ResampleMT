@@ -892,11 +892,9 @@ int __stdcall FilteredResizeH::SetCacheHints(int cachehints,int frame_range)
 {
   switch (cachehints)
   {
-  case CACHE_DONT_CACHE_ME:
-    return 1;
-  case CACHE_GET_MTMODE:
+  case CACHE_GET_MTMODE :
     return MT_MULTI_INSTANCE;
-  default:
+  default :
     return 0;
   }
 }
@@ -1374,11 +1372,9 @@ int __stdcall FilteredResizeV::SetCacheHints(int cachehints,int frame_range)
 {
   switch (cachehints)
   {
-  case CACHE_DONT_CACHE_ME:
-    return 1;
-  case CACHE_GET_MTMODE:
+  case CACHE_GET_MTMODE :
     return MT_MULTI_INSTANCE;
-  default:
+  default :
     return 0;
   }
 }
