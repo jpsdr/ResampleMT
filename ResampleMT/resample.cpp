@@ -39,6 +39,8 @@
 
 #define myfree(ptr) if (ptr!=NULL) { free(ptr); ptr=NULL;}
 #define myCloseHandle(ptr) if (ptr!=NULL) { CloseHandle(ptr); ptr=NULL;}
+#define mydelete(ptr) if (ptr!=NULL) { delete ptr; ptr=NULL;}
+#define mydelete2(ptr) if (ptr!=NULL) { delete[] ptr; ptr=NULL;}
 
 // Intrinsics for SSE4.1, SSSE3, SSE3, SSE2, ISSE and MMX
 #include <smmintrin.h>
@@ -829,7 +831,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	}
 
 	UserId=0;
-	CSectionOk=FALSE;
+	ghMutex=NULL;
 
 	if (!poolInterface->GetThreadPoolInterfaceStatus()) env->ThrowError("ResizeHMT: Error with the TheadPool status !");
 
@@ -849,8 +851,8 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	
 	threads_number=CreateMTData(threads_number,src_width,vi.height,dst_width,vi.height,shift_w,shift_h);
 
-	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
-	if (CSectionOk==FALSE) env->ThrowError("ResizeHMT: Unable to create Critical Section !");
+	ghMutex=CreateMutex(NULL,FALSE,NULL);
+	if (ghMutex==NULL) env->ThrowError("ResizeHMT: Unable to create Mutex !");
 
   
   // Main resampling program
@@ -1136,13 +1138,15 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 	const BYTE* srcp_V = (!grey && vi.IsPlanar()) ? src->GetReadPtr(PLANAR_V) : NULL;
 	BYTE* dstp_V = (!grey && vi.IsPlanar()) ? dst->GetWritePtr(PLANAR_V) : NULL;
 
-
-  EnterCriticalSection(&CriticalSection);
+  WaitForSingleObject(ghMutex,INFINITE);
 
   if (threads_number>1)
   {
 	if (!poolInterface->RequestThreadPool(UserId,threads_number,MT_Thread,0,false))
+	{
+		ReleaseMutex(ghMutex);
 		env->ThrowError("ResizeHMT: Error with the TheadPool while requesting threadpool !");
+	}
   }
   
 	for(uint8_t i=0; i<threads_number; i++)
@@ -1209,7 +1213,7 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 		}
 	}
 
-	LeaveCriticalSection(&CriticalSection);
+	ReleaseMutex(ghMutex);
 	
   return dst;
 }
@@ -1239,22 +1243,18 @@ ResamplerH FilteredResizeH::GetResampler(int CPU, bool aligned, int pixelsize, R
 
 void FilteredResizeH::FreeData(void) 
 {
-  if (resampling_program_luma!=NULL)   { delete resampling_program_luma; }
-  if (resampling_program_chroma!=NULL) { delete resampling_program_chroma; }
+	mydelete(resampling_program_luma);
+	mydelete(resampling_program_chroma);
 	
   myalignedfree(filter_storage_luma);
   myalignedfree(filter_storage_chroma);
+  myCloseHandle(ghMutex);
 }
 
 FilteredResizeH::~FilteredResizeH(void)
 {
 	if (threads_number>1) poolInterface->DeAllocateThreads(UserId);
 	FreeData();
-  if (CSectionOk==TRUE)
-  {
-	  DeleteCriticalSection(&CriticalSection);
-	  CSectionOk=FALSE;
-  }
 }
 
 
@@ -1297,7 +1297,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 		MT_Thread[i].pFunc=ResampleV_MT;
 	}
 	UserId=0;
-	CSectionOk=FALSE;
+	ghMutex=NULL;
 
 	if (!poolInterface->GetThreadPoolInterfaceStatus()) env->ThrowError("ResizeVMT: Error with the TheadPool status !");
 
@@ -1316,8 +1316,8 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	
 	threads_number=CreateMTData(threads_number,work_width,vi.height,work_width,target_height,shift_w,shift_h);
 
-	CSectionOk=InitializeCriticalSectionAndSpinCount(&CriticalSection,0x00000040);
-	if (CSectionOk==FALSE) env->ThrowError("ResizeVMT: Unable to create Mutex !");
+	ghMutex=CreateMutex(NULL,FALSE,NULL);
+	if (ghMutex==NULL) env->ThrowError("ResizeVMT: Unable to create Mutex !");
 
   if (vi.IsRGB())
     subrange_top = vi.height - subrange_top - subrange_height; // why?
@@ -1655,7 +1655,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 	BYTE* dstp_V = (!grey && vi.IsPlanar()) ? dst->GetWritePtr(PLANAR_V) : NULL;
 
 
-  EnterCriticalSection(&CriticalSection);
+  WaitForSingleObject(ghMutex,INFINITE);
 
   // Create pitch table
   if (src_pitch_luma != src->GetPitch()) {
@@ -1676,7 +1676,10 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
   if (threads_number>1)
   {
 	if (!poolInterface->RequestThreadPool(UserId,threads_number,MT_Thread,0,false))
+	{
+		ReleaseMutex(ghMutex);
 		env->ThrowError("ResizeHMT: Error with the TheadPool while requesting threadpool !");
+	}
   }
 
 	for(uint8_t i=0; i<threads_number; i++)
@@ -1770,7 +1773,7 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 		}
 	}
 
-	LeaveCriticalSection(&CriticalSection);
+	ReleaseMutex(ghMutex);
 
   return dst;
 }
@@ -1840,16 +1843,17 @@ ResamplerV FilteredResizeV::GetResampler(int CPU, bool aligned,int pixelsize, vo
 
 void FilteredResizeV::FreeData(void) 
 {
-  if (resampling_program_luma!=NULL)   { delete resampling_program_luma; }
-  if (resampling_program_chroma!=NULL) { delete resampling_program_chroma; }
-  if (src_pitch_table_luma!=NULL)    { delete[] src_pitch_table_luma; }
-  if (src_pitch_table_chromaU!=NULL) { delete[] src_pitch_table_chromaU; }
-  if (src_pitch_table_chromaV!=NULL) { delete[] src_pitch_table_chromaV; }
+	mydelete(resampling_program_luma);
+	mydelete(resampling_program_chroma);
+	mydelete2(src_pitch_table_luma);
+	mydelete2(src_pitch_table_chromaU);
+	mydelete2(src_pitch_table_chromaV);
 
   myalignedfree(filter_storage_luma_aligned);
   myalignedfree(filter_storage_luma_unaligned);
   myalignedfree(filter_storage_chroma_aligned);
   myalignedfree(filter_storage_chroma_unaligned);
+  myCloseHandle(ghMutex);
 }
 
 
@@ -1857,11 +1861,6 @@ FilteredResizeV::~FilteredResizeV(void)
 {
 	if (threads_number>1) poolInterface->DeAllocateThreads(UserId);
 	FreeData();
-  if (CSectionOk==TRUE)
-  {
-	  DeleteCriticalSection(&CriticalSection);
-	  CSectionOk=FALSE;
-  }
 }
 
 

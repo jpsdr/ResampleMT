@@ -41,7 +41,7 @@
 #include "resample_functions.h"
 #include "ThreadPoolInterface.h"
 
-#define RESAMPLE_MT_VERSION "ResampleMT 1.2.5 JPSDR"
+#define RESAMPLE_MT_VERSION "ResampleMT 1.2.6 JPSDR"
 
 // Resizer function pointer
 typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int MinY, int MaxY, const int* pitch_table, const void* storage);
@@ -88,8 +88,7 @@ private:
 	uint8_t threads_number;
 	bool LogicalCores,MaxPhysCores,SetAffinity;
 	uint16_t UserId;
-	CRITICAL_SECTION CriticalSection;
-	BOOL CSectionOk;
+	HANDLE ghMutex;
 	
 	ThreadPoolFunction ResampleH_MT;
 
@@ -146,8 +145,7 @@ private:
 	uint8_t threads_number;
 	bool LogicalCores,MaxPhysCores,SetAffinity;
 	uint16_t UserId;
-	CRITICAL_SECTION CriticalSection;
-	BOOL CSectionOk;
+	HANDLE ghMutex;
 
 	ThreadPoolFunction ResampleV_MT;
 
