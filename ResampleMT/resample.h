@@ -41,24 +41,25 @@
 #include "resample_functions.h"
 #include "ThreadPoolInterface.h"
 
-#define RESAMPLE_MT_VERSION "ResampleMT 1.2.6 JPSDR"
+#define RESAMPLE_MT_VERSION "ResampleMT 1.3.0 JPSDR"
 
 // Resizer function pointer
-typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int MinY, int MaxY, const int* pitch_table, const void* storage);
-typedef void (*ResamplerH)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int target_height);
+typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage);
+typedef void (*ResamplerH)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int target_height, int bits_per_pixel);
 
 
 typedef struct _MT_Data_Info
 {
-	const BYTE*src1,*src2,*src3;
-	BYTE *dst1,*dst2,*dst3;
-	int src_pitch1,src_pitch2,src_pitch3;
-	int dst_pitch1,dst_pitch2,dst_pitch3;
+	const BYTE*src1,*src2,*src3,*src4;
+	BYTE *dst1,*dst2,*dst3,*dst4;
+	int src_pitch1,src_pitch2,src_pitch3,src_pitch4;
+	int dst_pitch1,dst_pitch2,dst_pitch3,dst_pitch4;
 	int32_t src_Y_h_min,src_Y_h_max,src_Y_w;
 	int32_t src_UV_h_min,src_UV_h_max,src_UV_w;
 	int32_t dst_Y_h_min,dst_Y_h_max,dst_Y_w;
 	int32_t dst_UV_h_min,dst_UV_h_max,dst_UV_w;
-	void *filter_storage_luma,*filter_storage_chromaU,*filter_storage_chromaV;
+	void *filter_storage_luma,*filter_storage_luma2,*filter_storage_luma3,*filter_storage_luma4;
+	void *filter_storage_chromaU,*filter_storage_chromaV;
 	int *src_pitch_table_luma,*src_pitch_table_chromaU,*src_pitch_table_chromaV;
 	ResamplingProgram *resampling_program_luma,*resampling_program_chroma;
 	bool top,bottom;
@@ -80,7 +81,7 @@ public:
 
   int __stdcall SetCacheHints(int cachehints, int frame_range);
 
-  static ResamplerH GetResampler(int CPU, bool aligned, int pixelsize, ResamplingProgram* program, IScriptEnvironment* env);
+  static ResamplerH GetResampler(int CPU, bool aligned, int pixelsize, int bits_per_pixel, ResamplingProgram* program, IScriptEnvironment* env);
 
 private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
@@ -101,6 +102,9 @@ private:
 	int threads;
 	
 	void ResamplerLumaMT(uint8_t thread_num);
+	void ResamplerLumaMT2(uint8_t thread_num);
+	void ResamplerLumaMT3(uint8_t thread_num);
+	void ResamplerLumaMT4(uint8_t thread_num);
 	void ResamplerUChromaMT(uint8_t thread_num);
 	void ResamplerVChromaMT(uint8_t thread_num);
 	
@@ -115,8 +119,9 @@ private:
   void* filter_storage_chroma;
 
   int src_width, src_height, dst_width, dst_height;
-  bool grey,avsp;
+  bool grey,avsp,isRGBPfamily,isAlphaChannel;
   uint8_t pixelsize; // AVS16
+  uint8_t bits_per_pixel;
 
   ResamplerH resampler_h_luma;
   ResamplerH resampler_h_chroma;
@@ -137,7 +142,7 @@ public:
 
 	int __stdcall SetCacheHints(int cachehints, int frame_range);
 
-  static ResamplerV GetResampler(int CPU, bool aligned,int pixelsize, void*& storage, ResamplingProgram* program);
+  static ResamplerV GetResampler(int CPU, bool aligned,int pixelsize, int bits_per_pixel, void*& storage, ResamplingProgram* program);
 
 private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
@@ -159,13 +164,20 @@ private:
 
 	void ResamplerLumaAlignedMT(uint8_t thread_num);
 	void ResamplerLumaUnalignedMT(uint8_t thread_num);
+	void ResamplerLumaAlignedMT2(uint8_t thread_num);
+	void ResamplerLumaUnalignedMT2(uint8_t thread_num);
+	void ResamplerLumaAlignedMT3(uint8_t thread_num);
+	void ResamplerLumaUnalignedMT3(uint8_t thread_num);
+	void ResamplerLumaAlignedMT4(uint8_t thread_num);
+	void ResamplerLumaUnalignedMT4(uint8_t thread_num);
 	void ResamplerUChromaAlignedMT(uint8_t thread_num);
 	void ResamplerUChromaUnalignedMT(uint8_t thread_num);
 	void ResamplerVChromaAlignedMT(uint8_t thread_num);
 	void ResamplerVChromaUnalignedMT(uint8_t thread_num);
 
-  bool grey,avsp;
+  bool grey,avsp,isRGBPfamily,isAlphaChannel;
   uint8_t pixelsize; // AVS16
+  uint8_t bits_per_pixel;
 	
   ResamplingProgram *resampling_program_luma;
   ResamplingProgram *resampling_program_chroma;
