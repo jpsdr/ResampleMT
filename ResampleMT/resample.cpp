@@ -3676,8 +3676,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							const int shift = vi.GetPlaneWidthSubsampling(PLANAR_U);
 							const int div   = 1 << shift;
 
-							AVSValue v,vv,vu;
-							// AVSValue v,vv,vu,va; for later
+							AVSValue v,vv,vu,va;
 							
 							if (avsp)
 							{
@@ -3688,12 +3687,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 								vu=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
 								sargs[1]="V";
 								vv=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-								/* for later
 								if (isAlphaChannel)
 								{
 									sargs[1]="A";
 									va=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-								}*/									
+								}
 							}
 							else
 							{
@@ -3705,18 +3703,19 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							v = env->Invoke(turnRightFunction,v).AsClip();
 							vu = env->Invoke(turnRightFunction,vu).AsClip();
 							vv = env->Invoke(turnRightFunction,vv).AsClip();
-							//if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
+							if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
 							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
-							//if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+							if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							v = env->Invoke(turnLeftFunction,v).AsClip();
 							vu = env->Invoke(turnLeftFunction,vu).AsClip();
 							vv = env->Invoke(turnLeftFunction,vv).AsClip();
-							//if (isAlphaChannel) vz = env->Invoke(turnLeftFunction,vz).AsClip();
+							if (isAlphaChannel) va = env->Invoke(turnLeftFunction,va).AsClip();
 
-						    AVSValue ytouvargs[3] = {vu,vv,v};
-						    result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
+						    AVSValue ytouvargs[4] = {vu,vv,v,va};
+						    if (isAlphaChannel) result=env->Invoke("YtoUV",AVSValue(ytouvargs,4)).AsClip();
+							else result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
 						    if (vi.IsYUY2()) result=env->Invoke("ConvertToYUY2",result).AsClip();
 						}
 						else
@@ -3743,8 +3742,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						const int shift = vi.GetPlaneWidthSubsampling(PLANAR_U);
 						const int div   = 1 << shift;
 
-						AVSValue v,vv,vu;
-						// AVSValue v,vv,vu,va; for later
+						AVSValue v,vv,vu,va;
 						
 						if (avsp)
 						{
@@ -3755,12 +3753,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							vu=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
 							sargs[1]="V";
 							vv=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-							/* for later
 							if (isAlphaChannel)
 							{
 								sargs[1]="A";
 								va=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-							}*/									
+							}
 						}
 						else
 						{
@@ -3772,18 +3769,19 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						v = env->Invoke(turnRightFunction,v).AsClip();
 						vu = env->Invoke(turnRightFunction,vu).AsClip();
 						vv = env->Invoke(turnRightFunction,vv).AsClip();
-						//if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
+						if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
 						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
-						//if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+						if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						v = env->Invoke(turnLeftFunction,v).AsClip();
 						vu = env->Invoke(turnLeftFunction,vu).AsClip();
 						vv = env->Invoke(turnLeftFunction,vv).AsClip();
-						//if (isAlphaChannel) va = env->Invoke(turnLeftFunction,va).AsClip();
+						if (isAlphaChannel) va = env->Invoke(turnLeftFunction,va).AsClip();
 							
-					    AVSValue ytouvargs[3] = {vu,vv,v};
-					    result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
+					    AVSValue ytouvargs[4] = {vu,vv,v,va};
+					    if (isAlphaChannel) result=env->Invoke("YtoUV",AVSValue(ytouvargs,4)).AsClip();
+						else result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
 					    if (vi.IsYUY2()) result=env->Invoke("ConvertToYUY2",result).AsClip();
 					}
 					else
@@ -3829,8 +3827,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							const int shift = vi.GetPlaneWidthSubsampling(PLANAR_U);
 							const int div   = 1 << shift;
 
-							AVSValue v,vv,vu;
-							// AVSValue v,vv,vu,va; for later
+							AVSValue v,vv,vu,va;
 							
 							if (avsp)
 							{
@@ -3841,12 +3838,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 								vu=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
 								sargs[1]="V";
 								vv=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-								/* for later
 								if (isAlphaChannel)
 								{
 									sargs[1]="A";
 									va=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-								}*/									
+								}
 							}
 							else
 							{
@@ -3858,18 +3854,19 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							v = env->Invoke(turnRightFunction,v).AsClip();
 							vu = env->Invoke(turnRightFunction,vu).AsClip();
 							vv = env->Invoke(turnRightFunction,vv).AsClip();
-							//if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
+							if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
 							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
-							//if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+							if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 							v = env->Invoke(turnLeftFunction,v).AsClip();
 							vu = env->Invoke(turnLeftFunction,vu).AsClip();
 							vv = env->Invoke(turnLeftFunction,vv).AsClip();
-							//if (isAlphaChannel) va = env->Invoke(turnLeftFunction,va).AsClip();
+							if (isAlphaChannel) va = env->Invoke(turnLeftFunction,va).AsClip();
 
-						    AVSValue ytouvargs[3] = {vu,vv,v};
-						    result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
+						    AVSValue ytouvargs[4] = {vu,vv,v,va};
+						    if (isAlphaChannel) result=env->Invoke("YtoUV",AVSValue(ytouvargs,4)).AsClip();
+							else result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
 						    if (vi.IsYUY2()) result=env->Invoke("ConvertToYUY2",result).AsClip();
 						}
 						else
@@ -3896,8 +3893,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						const int shift = vi.GetPlaneWidthSubsampling(PLANAR_U);
 						const int div   = 1 << shift;
 
-						AVSValue v,vv,vu;
-						// AVSValue v,vv,vu,va; for later
+						AVSValue v,vv,vu,va;
 						
 						if (avsp)
 						{
@@ -3908,12 +3904,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							vu=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
 							sargs[1]="V";
 							vv=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-							/* for later
 							if (isAlphaChannel)
 							{
 								sargs[1]="A";
 								va=env->Invoke("PlaneToY",AVSValue(sargs,2)).AsClip();
-							}*/									
+							}
 						}
 						else
 						{
@@ -3925,18 +3920,19 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						v = env->Invoke(turnRightFunction,v).AsClip();
 						vu = env->Invoke(turnRightFunction,vu).AsClip();
 						vv = env->Invoke(turnRightFunction,vv).AsClip();
-						//if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
+						if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
 						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
-						//if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
+						if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,_threads,_LogicalCores,_MaxPhysCores,_SetAffinity,avsp, f, env);
 						v = env->Invoke(turnLeftFunction,v).AsClip();
 						vu = env->Invoke(turnLeftFunction,vu).AsClip();
 						vv = env->Invoke(turnLeftFunction,vv).AsClip();
-						//if (isAlphaChannel) va = env->Invoke(turnLeftFunction,va).AsClip();
+						if (isAlphaChannel) va = env->Invoke(turnLeftFunction,va).AsClip();
 
-					    AVSValue ytouvargs[3] = {vu,vv,v};
-					    result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
+					    AVSValue ytouvargs[4] = {vu,vv,v,va};
+					    if (isAlphaChannel) result=env->Invoke("YtoUV",AVSValue(ytouvargs,4)).AsClip();
+						else result=env->Invoke("YtoUV",AVSValue(ytouvargs,3)).AsClip();
 					    if (vi.IsYUY2()) result=env->Invoke("ConvertToYUY2",result).AsClip();
 					}
 					else
