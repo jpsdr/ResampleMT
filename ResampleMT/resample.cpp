@@ -510,7 +510,7 @@ static void resize_v_sseX_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch,
   const int max_pixel_value = ((int)1 << bits_per_pixel) - 1;  
   const float limit = (float)max_pixel_value;;
   const __m128 clamp_limit = _mm_set1_ps(limit); // clamp limit
-  const __m128 clamp_limit_i16 = _mm_set1_epi16(max_pixel_value);
+  const __m128i clamp_limit_i16 = _mm_set1_epi16(max_pixel_value);
 	  
   for (int y = MinY; y < MaxY; y++)
   {
@@ -573,6 +573,7 @@ static void resize_v_sseX_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch,
 		  _mm_stream_si128(reinterpret_cast<__m128i*>(dst+x), result);
 		  
 	  }
+	}
 
     // Leftover
     for (int x = wMod8; x < width; x++)
@@ -683,7 +684,7 @@ void resize_v_avx_planar_32(BYTE* dst0, const BYTE* src0, int dst_pitch, int src
 
   for (int y = MinY; y < MaxY; y++)
   {
-    const pixel_t* src_ptr = src + pitch_table[program->pixel_offset[y]];
+    const float* src_ptr = src + pitch_table[program->pixel_offset[y]];
 
     for (int x = 0; x < wMod8; x+=8)
 	{
@@ -753,7 +754,7 @@ void resize_v_avx_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch, int src
   const float limit = (float)max_pixel_value;
   const __m128i clamp_limit_i16 = _mm_set1_epi16(max_pixel_value); // clamp limit
 
-  for (int y = 0; y < target_height; y++)
+  for (int y = MinY; y < MaxY; y++)
   {
     const uint16_t *src_ptr = src + pitch_table[program->pixel_offset[y]];
 
@@ -831,7 +832,7 @@ void resize_v_avx2_planar_32(BYTE* dst0, const BYTE* src0, int dst_pitch, int sr
   dst_pitch>>=2;
   src_pitch>>=2;
 
-  for (int y = 0; y < target_height; y++)
+  for (int y = MinY; y < MaxY; y++)
   {
     const float *src_ptr = src + pitch_table[program->pixel_offset[y]];
 
@@ -888,7 +889,7 @@ void resize_v_avx2_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch, int sr
   _mm256_zeroupper();
   
   const int filter_size = program->filter_size;
-  const float *current_coeff_float = program->pixel_coefficient_float;
+  const float *current_coeff_float = program->pixel_coefficient_float + filter_size*MinY;
 
   const int wMod8 = (width >> 3) << 3; // uint16/float: 8 at a time (byte was 16 byte at a time)
 
@@ -903,7 +904,7 @@ void resize_v_avx2_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch, int sr
   const float limit = (float)max_pixel_value;
   const __m128i clamp_limit_i16 = _mm_set1_epi16(max_pixel_value); // clamp limit
 
-  for (int y = 0; y < target_height; y++)
+  for (int y = MinY; y < MaxY; y++)
   {
     const uint16_t *src_ptr = src + pitch_table[program->pixel_offset[y]];
 
@@ -1585,7 +1586,7 @@ static void resizer_h_avx_generic_int16_float_32(BYTE* dst8, const BYTE* src8, i
   const int filter_size = AlignNumber(program->filter_size, 8) >> 3;
 
   const float *src = reinterpret_cast<const float *>(src8);
-  pixel_t *dst = reinterpret_cast<float *>(dst8);
+  float *dst = reinterpret_cast<float *>(dst8);
   dst_pitch>>=2;
   src_pitch>>=2;
   
@@ -1728,14 +1729,12 @@ static void resizer_h_avx_generic_int16_float_16(BYTE* dst8, const BYTE* src8, i
   const int filter_size = AlignNumber(program->filter_size, 8) >> 3;
   const __m128i zero128 = _mm_setzero_si128();
 
-  const pixel_t *src = reinterpret_cast<const uint16_t *>(src8);
+  const uint16_t *src = reinterpret_cast<const uint16_t *>(src8);
   uint16_t *dst = reinterpret_cast<uint16_t *>(dst8);
   dst_pitch>>=1;
   src_pitch>>=1;
   
   const __m128 clamp_limit = _mm_set1_ps((float)(((int)1 << bits_per_pixel) - 1)); // clamp limit
-
-  __m128 data_l_single, data_h_single;
 
   for (int y = 0; y < height; y++)
   {
@@ -1892,8 +1891,6 @@ static void resizer_h_avx2_generic_int16_float_32(BYTE* dst8, const BYTE* src8, 
   dst_pitch>>=2;
   src_pitch>>=2;
   
-  __m128 data_l_single, data_h_single;
-
   for (int y = 0; y < height; y++)
   {
     const float *current_coeff = program->pixel_coefficient_float;
@@ -2019,8 +2016,6 @@ static void resizer_h_avx2_generic_int16_float_16(BYTE* dst8, const BYTE* src8, 
   src_pitch>>=1;
   
   const __m128 clamp_limit = _mm_set1_ps((float)(((int)1 << bits_per_pixel) - 1)); // clamp limit
-
-  __m128 data_l_single, data_h_single;
 
   for (int y = 0; y < height; y++)
   {
@@ -2695,7 +2690,7 @@ ResamplerH FilteredResizeH::GetResampler(int CPU, bool aligned, int pixelsize, i
 		{
 			resize_h_prepare_coeff_8(program,env);			
 #ifdef AVX_BUILD_POSSIBLE
-			if ((CPU & CPUF_AVX2)!=0) return resizer_h_avx2_generic_int16_float_32
+			if ((CPU & CPUF_AVX2)!=0) return resizer_h_avx2_generic_int16_float_32;
 			if ((CPU & CPUF_AVX)!=0) return resizer_h_avx_generic_int16_float_32;
 #endif			
 			return resizer_h_ssse3_generic_int16_float_32;
