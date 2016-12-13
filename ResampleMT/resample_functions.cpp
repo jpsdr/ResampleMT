@@ -236,7 +236,7 @@ ResamplingProgram* ResamplingFunction::GetResamplingProgram(int source_size, dou
   double filter_support = support() / filter_step;
   int fir_filter_size = int(ceil(filter_support*2));
 
-  ResamplingProgram* program = new ResamplingProgram(fir_filter_size, source_size, target_size, crop_start, crop_size, env);
+  ResamplingProgram *program = new ResamplingProgram(fir_filter_size, source_size, target_size, crop_start, crop_size, env);
 
   // this variable translates such that the image center remains fixed
   double pos;
