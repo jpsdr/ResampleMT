@@ -41,7 +41,7 @@
 #include "resample_functions.h"
 #include "ThreadPoolInterface.h"
 
-#define RESAMPLE_MT_VERSION "ResampleMT 1.3.0 JPSDR"
+#define RESAMPLE_MT_VERSION "ResampleMT 1.4.0 JPSDR"
 
 // Resizer function pointer
 typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage);
@@ -75,7 +75,7 @@ class FilteredResizeH : public GenericVideoFilter
 {
 public:
   FilteredResizeH( PClip _child, double subrange_left, double subrange_width, int target_width, int _threads,
-	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _avsp, ResamplingFunction* func, IScriptEnvironment* env );
+	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,bool _avsp, ResamplingFunction* func, IScriptEnvironment* env );
   virtual ~FilteredResizeH(void);
   PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
@@ -87,7 +87,7 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
-	bool LogicalCores,MaxPhysCores,SetAffinity;
+	bool LogicalCores,MaxPhysCores,SetAffinity,Sleep;
 	uint16_t UserId;
 	HANDLE ghMutex;
 	
@@ -136,7 +136,7 @@ class FilteredResizeV : public GenericVideoFilter
 {
 public:
   FilteredResizeV( PClip _child, double subrange_top, double subrange_height, int target_height, int _threads,
-	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _avsp,ResamplingFunction* func, IScriptEnvironment* env);
+	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,bool _avsp,ResamplingFunction* func, IScriptEnvironment* env);
   virtual ~FilteredResizeV(void);
   PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
@@ -148,7 +148,7 @@ private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
 	MT_Data_Info MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
-	bool LogicalCores,MaxPhysCores,SetAffinity;
+	bool LogicalCores,MaxPhysCores,SetAffinity,Sleep;
 	uint16_t UserId;
 	HANDLE ghMutex;
 
@@ -207,14 +207,14 @@ class FilteredResizeMT
 {
 public:
 static PClip CreateResizeV( PClip clip, double subrange_top, double subrange_height, int target_height, 
-                             int _threads,bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+                             int _threads,bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,
 							 bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
 static PClip CreateResizeH( PClip clip, double subrange_top, double subrange_height, int target_height, 
-                             int _threads, bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+                             int _threads, bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,
 							 bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
 
 static PClip CreateResize( PClip clip, int target_width, int target_height, int _threads,
-	bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,
+	bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,int prefetch,
 	const AVSValue* args, ResamplingFunction* f, IScriptEnvironment* env );
 
 static AVSValue __cdecl Create_PointResize(AVSValue args, void*, IScriptEnvironment* env);
