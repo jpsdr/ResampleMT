@@ -61,9 +61,28 @@ Several new parameters are added at the end of all the parameters :
           now, 0 will result in 1. For now, if you're using "prefetch" in your script, put the same
           value on this parameter.
 
+      Default: 0
+
+  range -
+      This parameter specify the range the output video data has to comply with.
+      Limited range is 16-235 for Y, 16-240 for U/V. Full range is 0-255 for all planes.
+      Alpha channel is not affected by this paramter, it's always full range.
+      Values are adjusted according bit depth of course. This parameter has no effect
+      for float datas.
+      0 : Automatic mode. If video is YUV mode is limited range, if video is RGB mode is
+          full range, if video is greyscale (Y/Y8) mode is Y limited range.
+      1 : Force full range whatever the video is.
+      2 : Force limited Y range for greyscale video (Y/Y8), limited range for YUV video,
+          no effect for RGB video.
+      3 : Force limited U/V range for greyscale video (Y/Y8), limited range for YUV video,
+          no effect for RGB video.
+
+      Default: 0
+
 
 The logicalCores, MaxPhysCore, SetAffinity and sleep are parameters to specify how the pool of thread
 will be created and handled, allowing if necessary each people to tune according his configuration.
 
 So, syntax is :
-ResampleFunction([original parameters],int threads, bool logicalCores, bool MaxPhysCore, bool SetAffinity, bool sleep, int prefetch)
+ResampleFunction([original parameters],int threads, bool logicalCores, bool MaxPhysCore, bool SetAffinity,
+  bool sleep, int prefetch,int range)

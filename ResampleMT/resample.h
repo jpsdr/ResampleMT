@@ -44,8 +44,8 @@
 #define RESAMPLE_MT_VERSION "ResampleMT 1.4.0 JPSDR"
 
 // Resizer function pointer
-typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage);
-typedef void (*ResamplerH)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int target_height, int bits_per_pixel);
+typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2);
+typedef void (*ResamplerH)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int target_height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2);
 
 
 typedef struct _MT_Data_Info
@@ -75,7 +75,8 @@ class FilteredResizeH : public GenericVideoFilter
 {
 public:
   FilteredResizeH( PClip _child, double subrange_left, double subrange_width, int target_width, int _threads,
-	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,bool _avsp, ResamplingFunction* func, IScriptEnvironment* env );
+	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,int range_mode,
+	  bool _avsp, ResamplingFunction* func, IScriptEnvironment* env );
   virtual ~FilteredResizeH(void);
   PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
@@ -122,6 +123,8 @@ private:
   bool grey,avsp,isRGBPfamily,isAlphaChannel;
   uint8_t pixelsize; // AVS16
   uint8_t bits_per_pixel;
+  uint8_t plane_range[4];
+  bool mode_YUY2;
 
   ResamplerH resampler_h_luma;
   ResamplerH resampler_h_chroma;
@@ -136,7 +139,8 @@ class FilteredResizeV : public GenericVideoFilter
 {
 public:
   FilteredResizeV( PClip _child, double subrange_top, double subrange_height, int target_height, int _threads,
-	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,bool _avsp,ResamplingFunction* func, IScriptEnvironment* env);
+	  bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,int range_mode,
+	  bool _avsp,ResamplingFunction* func, IScriptEnvironment* env);
   virtual ~FilteredResizeV(void);
   PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 
@@ -178,6 +182,8 @@ private:
   bool grey,avsp,isRGBPfamily,isAlphaChannel;
   uint8_t pixelsize; // AVS16
   uint8_t bits_per_pixel;
+  uint8_t plane_range[4];
+  bool mode_YUY2;
 	
   ResamplingProgram *resampling_program_luma;
   ResamplingProgram *resampling_program_chroma;
@@ -207,14 +213,14 @@ class FilteredResizeMT
 {
 public:
 static PClip CreateResizeV( PClip clip, double subrange_top, double subrange_height, int target_height, 
-                             int _threads,bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,
+                             int _threads,bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,int range_mode,
 							 bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
 static PClip CreateResizeH( PClip clip, double subrange_top, double subrange_height, int target_height, 
-                             int _threads, bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,
+                             int _threads, bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,int range_mode,
 							 bool _avsp,ResamplingFunction* func, IScriptEnvironment* env );
 
 static PClip CreateResize( PClip clip, int target_width, int target_height, int _threads,
-	bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,int prefetch,
+	bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _Sleep,int prefetch,int range_mode,
 	const AVSValue* args, ResamplingFunction* f, IScriptEnvironment* env );
 
 static AVSValue __cdecl Create_PointResize(AVSValue args, void*, IScriptEnvironment* env);
