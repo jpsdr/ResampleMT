@@ -50,7 +50,6 @@
 
 static ThreadPoolInterface *poolInterface;
 
-
 #if _MSC_VER >= 1900
   #define AVX_BUILD_POSSIBLE
 #endif
@@ -228,49 +227,23 @@ static void resize_v_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int s
 
 	dst_pitch>>=1;
 
-	if ((mode_YUY2) && (range>=2))
+	for (int y = MinY; y < MaxY; y++)
 	{
-		const __int64 TabMax[4] = {val235,val240,val235,val240};
+		const uint16_t *src_ptr = src0 + pitch_table[program->pixel_offset[y]];
 
-		for (int y = MinY; y < MaxY; y++)
+		for (int x = 0; x < width; x++)
 		{
-			const uint16_t *src_ptr = src0 + pitch_table[program->pixel_offset[y]];
+			__int64 result = 0;
 
-			for (int x = 0; x < width; x++)
-			{
-				__int64 result = 0;
+			for (int i = 0; i < filter_size; i++)
+				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 
-				for (int i = 0; i < filter_size; i++)
-					result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
-
-				result = (result+8192) >> 14;
-				result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
-				dst0[x] = (uint16_t) result;
-			}
-			dst0 += dst_pitch;
-			current_coeff += filter_size;
+			result = (result+8192) >> 14;
+			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
+			dst0[x] = (uint16_t) result;
 		}
-	}
-	else
-	{
-		for (int y = MinY; y < MaxY; y++)
-		{
-			const uint16_t *src_ptr = src0 + pitch_table[program->pixel_offset[y]];
-
-			for (int x = 0; x < width; x++)
-			{
-				__int64 result = 0;
-
-				for (int i = 0; i < filter_size; i++)
-					result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
-
-				result = (result+8192) >> 14;
-				result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
-				dst0[x] = (uint16_t) result;
-			}
-			dst0 += dst_pitch;
-			current_coeff += filter_size;
-		}
+		dst0 += dst_pitch;
+		current_coeff += filter_size;
 	}
 }
 
@@ -630,12 +603,11 @@ static void resize_v_sseX_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch,
 	const int val_max = (range==1) ? ((int)1 << bits_per_pixel)-1 : (range==2) ? val_235 : val_240;
 	const float val_minf = (float)val_min;
 	const float val_maxf = (float)val_max;
-	const float TabMax[4] = {(float)val_235,(float)val_240,(float)val_235,(float)val_240};
 
   const __m128 val_min_128f = _mm_set1_ps(val_minf); // clamp limit
-  const __m128 val_max_128f = (mode_YUY2 && (range>=2)) ? _mm_set_ps(TabMax[3],TabMax[2],TabMax[1],TabMax[0]) : _mm_set1_ps(val_maxf); // clamp limit
+  const __m128 val_max_128f = _mm_set1_ps(val_maxf); // clamp limit
   const __m128i val_min_128 = _mm_set1_epi16((short)val_min);
-  const __m128i val_max_128 = (mode_YUY2 && (range>=2)) ? _mm_set_epi16((short)val_240,(short)val_235,(short)val_240,(short)val_235,(short)val_240,(short)val_235,(short)val_240,(short)val_235) : _mm_set1_epi16((short)val_max);
+  const __m128i val_max_128 = _mm_set1_epi16((short)val_max);
 	  
   for (int y = MinY; y < MaxY; y++)
   {
@@ -704,30 +676,16 @@ static void resize_v_sseX_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch,
 	}
 
     // Leftover
-	if ((mode_YUY2) && (range>=2))
+	for (int x = wMod8; x < width; x++)
 	{
-		for (int x = wMod8; x < width; x++)
-		{
-			float result = 0;
+		float result = 0;
 	  
-			for (int i = 0; i < filter_size; i++)
-				result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
-			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_minf) ? val_minf : result;
-			dst[x] = (uint16_t) result;
-		}
+		for (int i = 0; i < filter_size; i++)
+			result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
+		result = (result>val_maxf) ? val_maxf : (result<val_minf) ? val_minf : result;
+		dst[x] = (uint16_t)result;
 	}
-	else
-	{
-		for (int x = wMod8; x < width; x++)
-		{
-			float result = 0;
-	  
-			for (int i = 0; i < filter_size; i++)
-				result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
-			result = (result>val_maxf) ? val_maxf : (result<val_minf) ? val_minf : result;
-			dst[x] = (uint16_t)result;
-		}
-	}
+
     dst += dst_pitch;
     current_coeff_float += filter_size;
   }
@@ -923,10 +881,9 @@ void resize_v_avx_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch, int src
 	const int val_max = (range==1) ? ((int)1 << bits_per_pixel)-1 : (range==2) ? val_235 : val_240;
 	const float val_minf = (float)val_min;
 	const float val_maxf = (float)val_max;
-	const float TabMax[4] = {(float)val_235,(float)val_240,(float)val_235,(float)val_240};
 
   const __m128i val_min_128 = _mm_set1_epi16((short)val_min);
-  const __m128i val_max_128 = (mode_YUY2 && (range>=2)) ? _mm_set_epi16((short)val_240,(short)val_235,(short)val_240,(short)val_235,(short)val_240,(short)val_235,(short)val_240,(short)val_235) : _mm_set1_epi16((short)val_max);
+  const __m128i val_max_128 = _mm_set1_epi16((short)val_max);
 
   for (int y = MinY; y < MaxY; y++)
   {
@@ -975,29 +932,14 @@ void resize_v_avx_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch, int src
     }
 
     // Leftover
-	if ((mode_YUY2) && (range>=2))
+	for (int x = wMod8; x < width; x++)
 	{
-		for (int x = wMod8; x < width; x++)
-		{
-			float result = 0;
+		float result = 0;
 
-			for (int i = 0; i < filter_size; i++)
-				result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
-			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_minf) ? val_minf : result;
-			dst[x] = (uint16_t) result;
-		}
-	}
-	else
-	{
-		for (int x = wMod8; x < width; x++)
-		{
-			float result = 0;
-
-			for (int i = 0; i < filter_size; i++)
-				result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
-			result = (result>val_maxf) ? val_maxf : (result<val_minf) ? val_minf : result;
-			dst[x] = (uint16_t) result;
-		}
+		for (int i = 0; i < filter_size; i++)
+			result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
+		result = (result>val_maxf) ? val_maxf : (result<val_minf) ? val_minf : result;
+		dst[x] = (uint16_t) result;
 	}
 
     dst += dst_pitch;
@@ -1096,10 +1038,9 @@ void resize_v_avx2_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch, int sr
 	const int val_max = (range==1) ? ((int)1 << bits_per_pixel)-1 : (range==2) ? val_235 : val_240;
 	const float val_minf = (float)val_min;
 	const float val_maxf = (float)val_max;
-	const float TabMax[4] = {(float)val_235,(float)val_240,(float)val_235,(float)val_240};
 
   const __m128i val_min_128 = _mm_set1_epi16((short)val_min);
-  const __m128i val_max_128 = (mode_YUY2 && (range>=2)) ? _mm_set_epi16((short)val_240,(short)val_235,(short)val_240,(short)val_235,(short)val_240,(short)val_235,(short)val_240,(short)val_235) : _mm_set1_epi16((short)val_max);
+  const __m128i val_max_128 = _mm_set1_epi16((short)val_max);
 
   for (int y = MinY; y < MaxY; y++)
   {
@@ -1147,29 +1088,14 @@ void resize_v_avx2_planar_16(BYTE* dst0, const BYTE* src0, int dst_pitch, int sr
     }
 
     // Leftover
-	if ((mode_YUY2) && (range>=2))
+	for (int x = wMod8; x < width; x++)
 	{
-		for (int x = wMod8; x < width; x++)
-		{
-			float result = 0;
+		float result = 0;
 
-			for (int i = 0; i < filter_size; i++)
-				result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
-			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_minf) ? val_minf : result;
-			dst[x] = (uint16_t) result;
-		}
-	}
-	else
-	{
-		for (int x = wMod8; x < width; x++)
-		{
-			float result = 0;
-
-			for (int i = 0; i < filter_size; i++)
-				result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
-			result = (result>val_maxf) ? val_maxf : (result<val_minf) ? val_minf : result;
-			dst[x] = (uint16_t) result;
-		}
+		for (int i = 0; i < filter_size; i++)
+			result += (src_ptr+pitch_table[i])[x] * current_coeff_float[i];
+		result = (result>val_maxf) ? val_maxf : (result<val_minf) ? val_minf : result;
+		dst[x] = (uint16_t) result;
 	}
 
     dst += dst_pitch;
@@ -1345,53 +1271,25 @@ static void resize_h_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int s
   src_pitch>>=1;
   dst_pitch>>=1;
   
-	if ((mode_YUY2) && (range>=2))
+	for (int y = 0; y < height; y++)
 	{
-		const __int64 TabMax[4] = {val235,val240,val235,val240};
-
-		for (int y = 0; y < height; y++)
+		const short *current_coeff=program->pixel_coefficient;
+  
+		for (int x = 0; x < width; x++)
 		{
-			const short *current_coeff=program->pixel_coefficient;
-	  
-			for (int x = 0; x < width; x++)
-			{
-				const int begin = program->pixel_offset[x];
-				__int64 result = 0;
+			const int begin = program->pixel_offset[x];
+			__int64 result = 0;
 		  
-				for (int i = 0; i < filter_size; i++)
-					result+=(src0+y_src_pitch)[(begin+i)]*current_coeff[i];
+			for (int i = 0; i < filter_size; i++)
+				result+=(src0+y_src_pitch)[(begin+i)]*current_coeff[i];
 		  
-				result = (result + 8192) >> 14;
-				result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
-				(dst0 + y_dst_pitch)[x] = (uint16_t)result;
-				current_coeff+=filter_size;
-			}
-			y_dst_pitch+=dst_pitch;
-			y_src_pitch+=src_pitch;
+			result = (result + 8192) >> 14;
+			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
+			(dst0 + y_dst_pitch)[x] = (uint16_t)result;
+			current_coeff+=filter_size;
 		}
-	}
-	else
-	{
-		for (int y = 0; y < height; y++)
-		{
-			const short *current_coeff=program->pixel_coefficient;
-	  
-			for (int x = 0; x < width; x++)
-			{
-				const int begin = program->pixel_offset[x];
-				__int64 result = 0;
-		  
-				for (int i = 0; i < filter_size; i++)
-					result+=(src0+y_src_pitch)[(begin+i)]*current_coeff[i];
-		  
-				result = (result + 8192) >> 14;
-				result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
-				(dst0 + y_dst_pitch)[x] = (uint16_t)result;
-				current_coeff+=filter_size;
-			}
-			y_dst_pitch+=dst_pitch;
-			y_src_pitch+=src_pitch;
-		}
+		y_dst_pitch+=dst_pitch;
+		y_src_pitch+=src_pitch;
 	}
 }
 
@@ -1567,10 +1465,9 @@ static void resizer_h_ssse3_generic_int16_float_16(BYTE* dst8, const BYTE* src8,
 	const int val_max = (range==1) ? ((int)1 << bits_per_pixel)-1 : (range==2) ? val_235 : val_240;
 	const float val_minf = (float)val_min;
 	const float val_maxf = (float)val_max;
-	const float TabMax[4] = {(float)val_235,(float)val_240,(float)val_235,(float)val_240};
 
   const __m128 val_min_128f = _mm_set1_ps(val_minf); // clamp limit
-  const __m128 val_max_128f = (mode_YUY2 && (range>=2)) ? _mm_set_ps(TabMax[3],TabMax[2],TabMax[1],TabMax[0]) : _mm_set1_ps(val_maxf); // clamp limit
+  const __m128 val_max_128f = _mm_set1_ps(val_maxf); // clamp limit
 
   for (int y = 0; y < height; y++)
   {
@@ -2048,10 +1945,9 @@ static void resizer_h_avx_generic_int16_float_16(BYTE* dst8, const BYTE* src8, i
 	const int val_max = (range==1) ? ((int)1 << bits_per_pixel)-1 : (range==2) ? val_235 : val_240;
 	const float val_minf = (float)val_min;
 	const float val_maxf = (float)val_max;
-	const float TabMax[4] = {(float)val_235,(float)val_240,(float)val_235,(float)val_240};
 
   const __m128 val_min_128f = _mm_set1_ps(val_minf); // clamp limit
-  const __m128 val_max_128f = (mode_YUY2 && (range>=2)) ? _mm_set_ps(TabMax[3],TabMax[2],TabMax[1],TabMax[0]) : _mm_set1_ps(val_maxf); // clamp limit
+  const __m128 val_max_128f = _mm_set1_ps(val_maxf); // clamp limit
 
   for (int y = 0; y < height; y++)
   {
@@ -2338,10 +2234,9 @@ static void resizer_h_avx2_generic_int16_float_16(BYTE* dst8, const BYTE* src8, 
 	const int val_max = (range==1) ? ((int)1 << bits_per_pixel)-1 : (range==2) ? val_235 : val_240;
 	const float val_minf = (float)val_min;
 	const float val_maxf = (float)val_max;
-	const float TabMax[4] = {(float)val_235,(float)val_240,(float)val_235,(float)val_240};
 
   const __m128 val_min_128f = _mm_set1_ps(val_minf); // clamp limit
-  const __m128 val_max_128f = (mode_YUY2 && (range>=2)) ? _mm_set_ps(TabMax[3],TabMax[2],TabMax[1],TabMax[0]) : _mm_set1_ps(val_maxf); // clamp limit
+  const __m128 val_max_128f = _mm_set1_ps(val_maxf); // clamp limit
 
   for (int y = 0; y < height; y++)
   {
