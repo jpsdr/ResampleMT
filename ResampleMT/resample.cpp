@@ -2681,7 +2681,7 @@ uint8_t FilteredResizeH::CreateMTData(uint8_t max_threads,int32_t src_size_x,int
 
 void FilteredResizeH::ResamplerLumaMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_h_luma(mt_data_inf.dst1,mt_data_inf.src1,mt_data_inf.dst_pitch1,mt_data_inf.src_pitch1,
 		mt_data_inf.resampling_program_luma,mt_data_inf.dst_Y_w,mt_data_inf.dst_Y_h_max-mt_data_inf.dst_Y_h_min,
@@ -2691,7 +2691,7 @@ void FilteredResizeH::ResamplerLumaMT(uint8_t thread_num)
 
 void FilteredResizeH::ResamplerLumaMT2(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_h_luma(mt_data_inf.dst2,mt_data_inf.src2,mt_data_inf.dst_pitch2,mt_data_inf.src_pitch2,
 		mt_data_inf.resampling_program_luma,mt_data_inf.dst_Y_w,mt_data_inf.dst_Y_h_max-mt_data_inf.dst_Y_h_min,
@@ -2701,7 +2701,7 @@ void FilteredResizeH::ResamplerLumaMT2(uint8_t thread_num)
 
 void FilteredResizeH::ResamplerLumaMT3(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_h_luma(mt_data_inf.dst3,mt_data_inf.src3,mt_data_inf.dst_pitch3,mt_data_inf.src_pitch3,
 		mt_data_inf.resampling_program_luma,mt_data_inf.dst_Y_w,mt_data_inf.dst_Y_h_max-mt_data_inf.dst_Y_h_min,
@@ -2710,7 +2710,7 @@ void FilteredResizeH::ResamplerLumaMT3(uint8_t thread_num)
 
 void FilteredResizeH::ResamplerLumaMT4(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_h_luma(mt_data_inf.dst4,mt_data_inf.src4,mt_data_inf.dst_pitch4,mt_data_inf.src_pitch4,
 		mt_data_inf.resampling_program_luma,mt_data_inf.dst_Y_w,mt_data_inf.dst_Y_h_max-mt_data_inf.dst_Y_h_min,
@@ -2719,7 +2719,7 @@ void FilteredResizeH::ResamplerLumaMT4(uint8_t thread_num)
 
 void FilteredResizeH::ResamplerUChromaMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_h_chroma(mt_data_inf.dst2,mt_data_inf.src2,mt_data_inf.dst_pitch2,mt_data_inf.src_pitch2,
 		mt_data_inf.resampling_program_chroma,mt_data_inf.dst_UV_w,mt_data_inf.dst_UV_h_max-mt_data_inf.dst_UV_h_min,
@@ -2729,7 +2729,7 @@ void FilteredResizeH::ResamplerUChromaMT(uint8_t thread_num)
 
 void FilteredResizeH::ResamplerVChromaMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_h_chroma(mt_data_inf.dst3,mt_data_inf.src3,mt_data_inf.dst_pitch3,mt_data_inf.src_pitch3,
 		mt_data_inf.resampling_program_chroma,mt_data_inf.dst_UV_w,mt_data_inf.dst_UV_h_max-mt_data_inf.dst_UV_h_min,
@@ -3275,7 +3275,7 @@ uint8_t FilteredResizeV::CreateMTData(uint8_t max_threads,int32_t src_size_x,int
 
 void FilteredResizeV::ResamplerLumaAlignedMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_aligned(mt_data_inf.dst1,mt_data_inf.src1,mt_data_inf.dst_pitch1,mt_data_inf.src_pitch1,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3285,7 +3285,7 @@ void FilteredResizeV::ResamplerLumaAlignedMT(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerLumaUnalignedMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_unaligned(mt_data_inf.dst1,mt_data_inf.src1,mt_data_inf.dst_pitch1,mt_data_inf.src_pitch1,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3294,7 +3294,7 @@ void FilteredResizeV::ResamplerLumaUnalignedMT(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerLumaAlignedMT2(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_aligned(mt_data_inf.dst2,mt_data_inf.src2,mt_data_inf.dst_pitch2,mt_data_inf.src_pitch2,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3304,7 +3304,7 @@ void FilteredResizeV::ResamplerLumaAlignedMT2(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerLumaUnalignedMT2(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_unaligned(mt_data_inf.dst2,mt_data_inf.src2,mt_data_inf.dst_pitch2,mt_data_inf.src_pitch2,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3314,7 +3314,7 @@ void FilteredResizeV::ResamplerLumaUnalignedMT2(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerLumaAlignedMT3(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_aligned(mt_data_inf.dst3,mt_data_inf.src3,mt_data_inf.dst_pitch3,mt_data_inf.src_pitch3,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3324,7 +3324,7 @@ void FilteredResizeV::ResamplerLumaAlignedMT3(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerLumaUnalignedMT3(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_unaligned(mt_data_inf.dst3,mt_data_inf.src3,mt_data_inf.dst_pitch3,mt_data_inf.src_pitch3,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3334,7 +3334,7 @@ void FilteredResizeV::ResamplerLumaUnalignedMT3(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerLumaAlignedMT4(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_aligned(mt_data_inf.dst4,mt_data_inf.src4,mt_data_inf.dst_pitch4,mt_data_inf.src_pitch4,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3344,7 +3344,7 @@ void FilteredResizeV::ResamplerLumaAlignedMT4(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerLumaUnalignedMT4(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_luma_unaligned(mt_data_inf.dst4,mt_data_inf.src4,mt_data_inf.dst_pitch4,mt_data_inf.src_pitch4,
 		mt_data_inf.resampling_program_luma,mt_data_inf.src_Y_w,bits_per_pixel,mt_data_inf.dst_Y_h_min,mt_data_inf.dst_Y_h_max,
@@ -3354,7 +3354,7 @@ void FilteredResizeV::ResamplerLumaUnalignedMT4(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerUChromaAlignedMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_chroma_aligned(mt_data_inf.dst2,mt_data_inf.src2,mt_data_inf.dst_pitch2,mt_data_inf.src_pitch2,
 		mt_data_inf.resampling_program_chroma,mt_data_inf.src_UV_w,bits_per_pixel,mt_data_inf.dst_UV_h_min,mt_data_inf.dst_UV_h_max,
@@ -3364,7 +3364,7 @@ void FilteredResizeV::ResamplerUChromaAlignedMT(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerUChromaUnalignedMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_chroma_unaligned(mt_data_inf.dst2,mt_data_inf.src2,mt_data_inf.dst_pitch2,mt_data_inf.src_pitch2,
 		mt_data_inf.resampling_program_chroma,mt_data_inf.src_UV_w,bits_per_pixel,mt_data_inf.dst_UV_h_min,mt_data_inf.dst_UV_h_max,
@@ -3374,7 +3374,7 @@ void FilteredResizeV::ResamplerUChromaUnalignedMT(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerVChromaAlignedMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_chroma_aligned(mt_data_inf.dst3,mt_data_inf.src3,mt_data_inf.dst_pitch3,mt_data_inf.src_pitch3,
 		mt_data_inf.resampling_program_chroma,mt_data_inf.src_UV_w,bits_per_pixel,mt_data_inf.dst_UV_h_min,mt_data_inf.dst_UV_h_max,
@@ -3384,7 +3384,7 @@ void FilteredResizeV::ResamplerVChromaAlignedMT(uint8_t thread_num)
 
 void FilteredResizeV::ResamplerVChromaUnalignedMT(uint8_t thread_num)
 {
-	const MT_Data_Info mt_data_inf=MT_Data[thread_num];
+	const MT_Data_Info_ResampleMT mt_data_inf=MT_Data[thread_num];
 
 	resampler_chroma_unaligned(mt_data_inf.dst3,mt_data_inf.src3,mt_data_inf.dst_pitch3,mt_data_inf.src_pitch3,
 		mt_data_inf.resampling_program_chroma,mt_data_inf.src_UV_w,bits_per_pixel,mt_data_inf.dst_UV_h_min,mt_data_inf.dst_UV_h_max,

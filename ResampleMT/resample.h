@@ -41,14 +41,14 @@
 #include "resample_functions.h"
 #include "ThreadPoolInterface.h"
 
-#define RESAMPLE_MT_VERSION "ResampleMT 1.4.0 JPSDR"
+#define RESAMPLE_MT_VERSION "ResampleMT 1.5.0 JPSDR"
 
 // Resizer function pointer
 typedef void (*ResamplerV)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2);
 typedef void (*ResamplerH)(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int target_height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2);
 
 
-typedef struct _MT_Data_Info
+typedef struct _MT_Data_Info_ResampleMT
 {
 	const BYTE*src1,*src2,*src3,*src4;
 	BYTE *dst1,*dst2,*dst3,*dst4;
@@ -63,7 +63,7 @@ typedef struct _MT_Data_Info
 	int *src_pitch_table_luma,*src_pitch_table_chromaU,*src_pitch_table_chromaV;
 	ResamplingProgram *resampling_program_luma,*resampling_program_chroma;
 	bool top,bottom;
-} MT_Data_Info;
+} MT_Data_Info_ResampleMT;
 
 
 
@@ -86,7 +86,7 @@ public:
 
 private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
-	MT_Data_Info MT_Data[MAX_MT_THREADS];
+	MT_Data_Info_ResampleMT MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
 	bool LogicalCores,MaxPhysCores,SetAffinity,Sleep;
 	uint16_t UserId;
@@ -150,7 +150,7 @@ public:
 
 private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
-	MT_Data_Info MT_Data[MAX_MT_THREADS];
+	MT_Data_Info_ResampleMT MT_Data[MAX_MT_THREADS];
 	uint8_t threads_number;
 	bool LogicalCores,MaxPhysCores,SetAffinity,Sleep;
 	uint16_t UserId;
