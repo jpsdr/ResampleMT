@@ -3875,7 +3875,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 
 		if (threads_number==0) env->ThrowError("ResizeMT: Error with the TheadPool while getting CPU info!");
 
-		if (!poolInterface->AllocateThreads(threads_number,0,0,_MaxPhysCores,_SetAffinity,_sleep,-1))
+		if (!poolInterface->AllocateThreads(threads_number,0,0,_MaxPhysCores,_SetAffinity,true,-1))
 			env->ThrowError("ResizeMT: Error with the TheadPool while allocating threadpool!");
 	}
   
@@ -4563,6 +4563,8 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 	AVS_linkage = vectors;
 
 	poolInterface=ThreadPoolInterface::Init(0);
+
+	if (!poolInterface->GetThreadPoolInterfaceStatus()) env->ThrowError("ResampleMT: Error with the TheadPool status!");
 
 	env->AddFunction("PointResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i",
 		FilteredResizeMT::Create_PointResize, 0);
