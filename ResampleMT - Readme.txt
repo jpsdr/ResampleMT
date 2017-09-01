@@ -1,4 +1,8 @@
-Internaly multi-threaded resampling functions.
+Internaly multi-threaded resampling and desampling functions.
+
+************************
+Resampling
+************************
 
 The functions inside this plugin are :
 PointResizeMT
@@ -19,7 +23,6 @@ backward compatible.
 Several new parameters are added at the end of all the parameters :
 
    threads -
-
       Controls how many threads will be used for processing. If set to 0, threads will
       be set equal to the number of detected logical or physical cores,according logicalCores parameter.
 
@@ -88,3 +91,55 @@ will be created and handled, allowing if necessary each people to tune according
 So, syntax is :
 ResampleFunction([original parameters],int threads, bool logicalCores, bool MaxPhysCore, bool SetAffinity,
   bool sleep, int prefetch,int range)
+
+
+************************
+Desampling
+************************
+
+The functions inside this plugin are :
+DeBilinearResizeMT
+DeBicubicResizeMT
+DeLanczosResizeMT
+DeLanczos4ResizeMT
+DeBlackmanResizeMT
+DeSpline16ResizeMT
+DeSpline36ResizeMT
+DeSpline64ResizeMT
+DeGaussResizeMT
+DeSincResizeMT
+
+Parameters are identicals to the resampling functions, except there is two others parameters at the end.
+
+   accuracy -
+      Will specify the accuracy used for the desampling.
+      0 : Average
+      1 : A little less than 0.
+      2 : A little better than 0.
+
+      Default:  0  (int)
+
+   order -
+      Will specify in what order the desampling will be done (process horizontal or vertical first).
+      0 : Automatic, will choose according the same method implemented in the core filters.
+      1 : Process vertical first.
+      2 : Process horizontal first.
+
+      Default:  0  (int)
+
+
+So, syntax is :
+DesampleFunction([parameters of ResampleMT],int accuracy,int order)
+
+The usage is the following : You have to enter in the parameters exactly the same that have been
+used for the original resampling, except the size of course, where you specify the original size you want back.
+
+For exemple, if the source file is an 1280x720 video :
+
+Spline36ResizeMT(1920,1080,src_left=-0.2)
+# or Spline36Resize(1920,1080,src_left=-0.2)
+# To revert :
+DeSpline36ResizeMT(1280,720,src_left=-0.2)
+
+For more informations, go here : https://forum.doom9.org/showthread.php?p=1817097#post1817097
+
