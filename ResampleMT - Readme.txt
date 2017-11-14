@@ -134,7 +134,7 @@ DesampleFunction([parameters of ResampleMT],int accuracy,int order)
 The usage is the following : You have to enter in the parameters exactly the same that have been
 used for the original resampling, except the size of course, where you specify the original size you want back.
 
-For exemple, if the source file is an 1280x720 video :
+For exemple, if the source file is a 1280x720 video :
 
 Spline36ResizeMT(1920,1080,src_left=-0.2)
 # or Spline36Resize(1920,1080,src_left=-0.2)
