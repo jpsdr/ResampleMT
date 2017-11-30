@@ -2464,6 +2464,12 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	  SizeH=dst_width;
   }
 
+  if (desample && (SizeH>vi.width))
+  {
+	  FreeData();
+	  env->ThrowError("ResizeHMT: Desampling can only downscale");
+  }
+
   threads_number=CreateMTData(threads_number,src_width,vi.height,SizeH,vi.height,shift_w,shift_h);
 
   if (vi.IsPlanar() && !grey && !isRGBPfamily)
@@ -2528,8 +2534,6 @@ int __stdcall FilteredResizeH::SetCacheHints(int cachehints,int frame_range)
 
 uint8_t FilteredResizeH::CreateMTData(uint8_t max_threads,int32_t src_size_x,int32_t src_size_y,int32_t dst_size_x,int32_t dst_size_y,int UV_w,int UV_h)
 {
-	int32_t _y_min,_dh;
-
 	if ((max_threads<=1) || (max_threads>threads_number))
 	{
 		MT_Data[0].top=true;
@@ -2565,9 +2569,10 @@ uint8_t FilteredResizeH::CreateMTData(uint8_t max_threads,int32_t src_size_x,int
 		return(1);
 	}
 
+	int32_t _y_min,_dh;
 	int32_t src_dh_Y,src_dh_UV,dst_dh_Y,dst_dh_UV;
 	int32_t h_y;
-	uint8_t i,max=0;
+	uint8_t i,max_src=0,max_dst=0,max;
 
 	dst_dh_Y=(dst_size_y+(uint32_t)max_threads-1)/(uint32_t)max_threads;
 	if (dst_dh_Y<16) dst_dh_Y=16;
@@ -2581,22 +2586,25 @@ uint8_t FilteredResizeH::CreateMTData(uint8_t max_threads,int32_t src_size_x,int
 		if ((src_dh_Y & 3)!=0) src_dh_Y=((src_dh_Y+3) >> 2) << 2;
 	}
 
-	if (src_size_y<dst_size_y)
-	{
-		_y_min=src_size_y;
-		_dh=src_dh_Y;
-	}
-	else
-	{
-		_y_min=dst_size_y;
-		_dh=dst_dh_Y;
-	}
+	_y_min=src_size_y;
+	_dh=src_dh_Y;
 	h_y=0;
 	while (h_y<(_y_min-16))
 	{
-		max++;
+		max_src++;
 		h_y+=_dh;
 	}
+
+	_y_min=dst_size_y;
+	_dh=dst_dh_Y;
+	h_y=0;
+	while (h_y<(_y_min-16))
+	{
+		max_dst++;
+		h_y+=_dh;
+	}
+
+	max=(max_src<max_dst) ? max_src:max_dst;
 
 	if (max==1)
 	{
@@ -3076,6 +3084,12 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	  SizeV=target_height;
   }
 
+  if (desample && (SizeV>vi.height))
+  {
+	  FreeData();
+	  env->ThrowError("ResizeVMT: Desampling can only downscale.");
+  }
+
   threads_number=CreateMTData(threads_number,work_width,vi.height,work_width,SizeV,shift_w,shift_h);
 
   src_pitch_table_luma = (int *)_aligned_malloc(sizeof(int) * vi.height, 64);
@@ -3153,8 +3167,6 @@ int __stdcall FilteredResizeV::SetCacheHints(int cachehints,int frame_range)
 
 uint8_t FilteredResizeV::CreateMTData(uint8_t max_threads,int32_t src_size_x,int32_t src_size_y,int32_t dst_size_x,int32_t dst_size_y,int UV_w,int UV_h)
 {
-	int32_t _y_min,_dh;
-
 	if ((max_threads<=1) || (max_threads>threads_number))
 	{
 		MT_Data[0].top=true;
@@ -3190,9 +3202,10 @@ uint8_t FilteredResizeV::CreateMTData(uint8_t max_threads,int32_t src_size_x,int
 		return(1);
 	}
 
+	int32_t _y_min,_dh;
 	int32_t src_dh_Y,src_dh_UV,dst_dh_Y,dst_dh_UV;
 	int32_t h_y;
-	uint8_t i,max=0;
+	uint8_t i,max_src=0,max_dst=0,max;
 
 	dst_dh_Y=(dst_size_y+(uint32_t)max_threads-1)/(uint32_t)max_threads;
 	if (dst_dh_Y<16) dst_dh_Y=16;
@@ -3206,22 +3219,25 @@ uint8_t FilteredResizeV::CreateMTData(uint8_t max_threads,int32_t src_size_x,int
 		if ((src_dh_Y & 3)!=0) src_dh_Y=((src_dh_Y+3) >> 2) << 2;
 	}
 
-	if (src_size_y<dst_size_y)
-	{
-		_y_min=src_size_y;
-		_dh=src_dh_Y;
-	}
-	else
-	{
-		_y_min=dst_size_y;
-		_dh=dst_dh_Y;
-	}
+	_y_min=src_size_y;
+	_dh=src_dh_Y;
 	h_y=0;
 	while (h_y<(_y_min-16))
 	{
-		max++;
+		max_src++;
 		h_y+=_dh;
 	}
+
+	_y_min=dst_size_y;
+	_dh=dst_dh_Y;
+	h_y=0;
+	while (h_y<(_y_min-16))
+	{
+		max_dst++;
+		h_y+=_dh;
+	}
+
+	max=(max_src<max_dst) ? max_src:max_dst;
 
 	if (max==1)
 	{
