@@ -46,7 +46,7 @@ Several new parameters are added at the end of all the parameters :
       If this parameter is set to true, the pool of threads will set each thread to a specific core,
       according MaxPhysCore parameter. If set to false, it's leaved to the OS.
 
-      Default: false (bool)
+      Default: true (bool)
 
   sleep -
       If this parameter is set to true, once the filter has finished one frame, the threads of the
