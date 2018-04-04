@@ -45,6 +45,7 @@ Several new parameters are added at the end of all the parameters :
    SetAffinity -
       If this parameter is set to true, the pool of threads will set each thread to a specific core,
       according MaxPhysCore parameter. If set to false, it's leaved to the OS.
+      If prefecth>number of physical cores, it's automaticaly set to false.
 
       Default: true (bool)
 
