@@ -85,13 +85,25 @@ Several new parameters are added at the end of all the parameters :
 
       Default: 1
 
+  ThreadLevel -
+      This parameter will set the priority level of the threads created for the processing (internal
+      multithreading). No effect if threads=1.
+      1 : Idle level.
+      2 : Lowest level.
+      3 : Below level.
+      4 : Normal level.
+      5 : Above level.
+      6 : Highest level.
+      7 : Time critical level (WARNING !!! use this level at your own risk)
+
+      Default : 6
 
 The logicalCores, MaxPhysCore, SetAffinity and sleep are parameters to specify how the pool of thread
 will be created and handled, allowing if necessary each people to tune according his configuration.
 
 So, syntax is :
 ResampleFunction([original parameters],int threads, bool logicalCores, bool MaxPhysCore, bool SetAffinity,
-  bool sleep, int prefetch,int range)
+  bool sleep, int prefetch,int range,int ThreadLevel)
 
 
 ************************
@@ -130,7 +142,7 @@ Parameters are identicals to the resampling functions, except there is two other
 
 
 So, syntax is :
-DesampleFunction([parameters of ResampleMT],int accuracy,int order)
+DesampleFunction([parameters of ResampleMT without ThreadLevel],int accuracy,int order,int ThreadLevel)
 
 The usage is the following : You have to enter in the parameters exactly the same that have been
 used for the original resampling, except the size of course, where you specify the original size you want back.
