@@ -4528,7 +4528,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
   PClip result;
   // ensure that the intermediate area is maximal
   const double area_FirstH = (desample)?subrange_height*vi.width:subrange_height*target_width;
-  const double area_FirstV = (desample)?subrange_width*target_height:subrange_width*vi.height;
+  const double area_FirstV = (desample)?subrange_width*vi.height:subrange_width*target_height;
 
   bool VFirst;
 

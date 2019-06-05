@@ -359,7 +359,8 @@ ResamplingProgram* ResamplingFunction::GetResamplingProgram(int source_size, dou
         double new_value = value+f((start_pos+k-ok_pos)*filter_step)/total;
         // FIXME: is it correct to round negative values upwards?
 		// Answer : No with int, yes with floor.
-		program->pixel_coefficient[i*fir_filter_size+k] = (short)floor((new_value-value)*current_FPScale+0.5); // to make it round across pixels
+		//program->pixel_coefficient[i*fir_filter_size+k] = (short)floor((new_value-value)*current_FPScale+0.5); // to make it round across pixels
+		program->pixel_coefficient[i*fir_filter_size+k] = short(int(new_value*current_FPScale+0.5)-int(value*current_FPScale+0.5)); // to make it round across pixels
         value = new_value;
       }
     }
