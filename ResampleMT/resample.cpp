@@ -2967,10 +2967,12 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 		}
 	}
 
+	has_at_least_v8=true;
+	try { env->CheckVersion(8); } catch (const AvisynthError&) { has_at_least_v8=false; }
+
   // Change target video info size
   vi.width =SizeH;
 }
-
 
 
 int __stdcall FilteredResizeH::SetCacheHints(int cachehints,int frame_range)
@@ -3232,7 +3234,7 @@ void FilteredResizeH::StaticThreadpoolH(void *ptr)
 PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 {
   PVideoFrame src = child->GetFrame(n, env);
-  PVideoFrame dst = env->NewVideoFrame(vi);
+  PVideoFrame dst = (has_at_least_v8)?env->NewVideoFrameP(vi,&src):env->NewVideoFrame(vi,64);
   
   const int src_pitch_1 = src->GetPitch();
   const int dst_pitch_1 = dst->GetPitch();
@@ -3734,6 +3736,9 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 		}
 	}
 
+	has_at_least_v8=true;
+	try { env->CheckVersion(8); } catch (const AvisynthError&) { has_at_least_v8=false; }
+
   // Change target video info size
   vi.height = SizeV;
 }
@@ -3923,6 +3928,7 @@ uint8_t FilteredResizeV::CreateMTData(uint8_t max_threads,int32_t src_size_x,int
 	return(max);
 }
 
+
 void FilteredResizeV::ResamplerLumaAlignedMT(MT_Data_Info_ResampleMT *MT_DataGF)
 {
 	resampler_luma_aligned(MT_DataGF->dst1,MT_DataGF->src1,MT_DataGF->dst_pitch1,MT_DataGF->src_pitch1,
@@ -4058,7 +4064,7 @@ void FilteredResizeV::StaticThreadpoolV(void *ptr)
 PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 {
   PVideoFrame src = child->GetFrame(n, env);
-  PVideoFrame dst = env->NewVideoFrame(vi);
+  PVideoFrame dst = (has_at_least_v8)?env->NewVideoFrameP(vi,&src):env->NewVideoFrame(vi,64);
   
   const int src_pitch_1 = src->GetPitch();
   const int dst_pitch_1 = dst->GetPitch();
