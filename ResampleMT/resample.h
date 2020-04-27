@@ -37,9 +37,9 @@
 
 //#include <stdint.h>
 #include <windows.h>
-#include "avisynth.h"
-#include "resample_functions.h"
-#include "ThreadPoolInterface.h"
+#include "./avisynth.h"
+#include "./resample_functions.h"
+#include "./ThreadPoolInterface.h"
 
 #define RESAMPLE_MT_VERSION "ResampleMT 2.2.2 JPSDR"
 

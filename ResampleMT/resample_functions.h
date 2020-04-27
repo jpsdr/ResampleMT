@@ -37,8 +37,8 @@
 
 #include <malloc.h>
 #include <math.h>
-#include "avisynth.h"
-#include "MatrixClass.h"
+#include "./avisynth.h"
+#include "./MatrixClass.h"
 #include "./avs/alignment.h"
 
 #define myalignedfree(ptr) if (ptr!=NULL) { _aligned_free(ptr); ptr=NULL;}
