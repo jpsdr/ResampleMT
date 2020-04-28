@@ -166,6 +166,10 @@
   <ItemGroup>
     <ClCompile Include="MatrixClass.cpp" />
     <ClCompile Include="resample.cpp" />
+    <ClCompile Include="resample_avx2.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="resample_functions.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="ThreadPoolInterface.cpp" />
@@ -173,6 +177,7 @@
   <ItemGroup>
     <ClInclude Include="MatrixClass.h" />
     <ClInclude Include="resample.h" />
+    <ClInclude Include="resample_avx2.h" />
     <ClInclude Include="resample_functions.h" />
     <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="ThreadPoolDef.h" />
