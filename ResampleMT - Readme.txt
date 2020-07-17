@@ -16,6 +16,7 @@ Spline36ResizeMT
 Spline64ResizeMT
 GaussResizeMT
 SincResizeMT
+SinPowResizeMT (same parameters than Gauss, default param 2.5)
 
 Parameters are exactly the same than the orignal resampling functions, and in the same order, so they are totaly
 backward compatible.
@@ -121,6 +122,7 @@ DeSpline36ResizeMT
 DeSpline64ResizeMT
 DeGaussResizeMT
 DeSincResizeMT
+DeSinSqrResizeMT (same parameters than DeGauss)
 
 Parameters are identicals to the resampling functions, except there is two others parameters at the end.
 
