@@ -17,6 +17,7 @@ Spline64ResizeMT
 GaussResizeMT
 SincResizeMT
 SinPowResizeMT (same parameters than Gauss, default param 2.5)
+SincLin2ResizeMT (same parameters than Sinc, default param 15)
 
 Parameters are exactly the same than the orignal resampling functions, and in the same order, so they are totaly
 backward compatible.
