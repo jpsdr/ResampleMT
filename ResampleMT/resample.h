@@ -247,6 +247,8 @@ static AVSValue __cdecl Create_SinPowerResize(AVSValue args, void*, IScriptEnvir
 
 static AVSValue __cdecl Create_SincLin2Resize(AVSValue args, void*, IScriptEnvironment* env);
 
+static AVSValue __cdecl Create_UserDefined2Resize(AVSValue args, void*, IScriptEnvironment* env);
+
 // Desample functions
 
 static AVSValue __cdecl Create_DeBilinearResize(AVSValue args, void*, IScriptEnvironment* env);
