@@ -329,6 +329,47 @@ double SincLin2Filter::f(double value)
 }
 
 
+/*********************************
+ *** UserDefined2 filter ***
+ *********************************/
+
+UserDefined2Filter::UserDefined2Filter(float _b, float _c)
+{
+    a = 1.0f; // 0 sample = 1
+    b = (float)clamp(_b, -50.0f, 250.0f); // 1 and -1  sample
+    c = (float)clamp(_c, -50.0f, 250.0f); // 2 and -2 sample
+    b = (b - 16.0f) / 219.0f;
+    c = (c - 16.0f) / 219.0f;
+}
+
+double UserDefined2Filter::sinc(double value)
+{
+ 
+    if (value > 0.000001 || value < -0.000001)
+    {
+        value *= M_PI;
+        return sin(value) / value;
+    }
+    else
+    {
+        return 1.0;
+    }
+}
+
+double UserDefined2Filter::f(double x)
+{
+    x = fabs(x);
+
+    if (x <= 3) // ?
+    {
+        return c * sinc(x + 2) + b * sinc(x + 1) + a * sinc(x) + b * sinc(x - 1) + c * sinc(x - 2);
+    }
+    else
+        return 0;
+
+}
+
+
 /******************************
  **** Resampling Patterns  ****
  *****************************/
