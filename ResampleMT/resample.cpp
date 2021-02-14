@@ -4949,10 +4949,10 @@ AVSValue __cdecl FilteredResizeMT::Create_SincLin2Resize(AVSValue args, void*, I
 
 AVSValue __cdecl FilteredResizeMT::Create_UserDefined2Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
-	UserDefined2Filter f(args[3].AsFloat(121.0f), args[4].AsFloat(19.0f));
-	return CreateResize(args[0].AsClip(), args[1].AsInt(), args[2].AsInt(), args[9].AsInt(0),
-		args[10].AsBool(true), args[11].AsBool(true), args[12].AsBool(false), args[13].AsBool(false),
-		args[14].AsInt(0), args[15].AsInt(1), false, 0, 0, args[16].AsInt(6), &args[5], &f, env);
+	UserDefined2Filter f(args[3].AsFloat(121.0),args[4].AsFloat(19.0));
+	return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[9].AsInt(0),
+		args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
+		args[14].AsInt(0),args[15].AsInt(1),false,0,0,args[16].AsInt(6),&args[5],&f,env);
 }
 
 // Desample functions
@@ -5065,6 +5065,15 @@ AVSValue __cdecl FilteredResizeMT::Create_DeSincLin2Resize(AVSValue args, void*,
 	  &args[3],&f,env);
 }
 
+AVSValue __cdecl FilteredResizeMT::Create_DeUserDefined2Resize(AVSValue args, void*, IScriptEnvironment* env)
+{
+  UserDefined2Filter f(args[3].AsFloat(121.0f),args[4].AsFloat(19.0f));
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[9].AsInt(0),
+	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
+	  args[14].AsInt(0),args[15].AsInt(1),true,args[16].AsInt(0),args[17].AsInt(0),args[18].AsInt(6),
+	  &args[5],&f,env);
+}
+
 
 const AVS_Linkage *AVS_linkage = nullptr;
 
@@ -5133,6 +5142,8 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSinPowerResize, 0);
 	env->AddFunction("DeSincLin2ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i" \
 		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSincLin2Resize, 0);
+	env->AddFunction("DeUserDefined2ResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[threads]i" \
+		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeUserDefined2Resize, 0);
 
 	return "ResizeMT plugin";	
 }

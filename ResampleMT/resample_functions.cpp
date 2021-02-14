@@ -288,10 +288,7 @@ double SincFilter::f(double value)
     value *= M_PI;
     return sin(value)/value;
   }
-  else
-  {
-    return 1.0;
-  }
+  else return 1.0;
 }
 
 
@@ -309,22 +306,17 @@ double SincLin2Filter::sinc(double value)
 	if (value > 0.000001)
 	{
 		value *= M_PI;
-		return sin(value) / value;
+		return sin(value)/value;
 	}
-	else
-	{
-		return 1.0;
-	}
+	else return 1.0;
 }
 
 double SincLin2Filter::f(double value)
 {
 	value = fabs(value);
 
-	if (value < taps / 2.0)
-		return sinc(value);
-	else
-		return sinc(value)*((2.0 - (2.0 * value / taps)));
+	if (value<(taps/2.0)) return sinc(value);
+	else return sinc(value)*((2.0-(2.0*value/taps)));
 
 }
 
@@ -333,39 +325,35 @@ double SincLin2Filter::f(double value)
  *** UserDefined2 filter ***
  *********************************/
 
-UserDefined2Filter::UserDefined2Filter(float _b, float _c)
+UserDefined2Filter::UserDefined2Filter(double _b, double _c)
 {
-    a = 1.0f; // 0 sample = 1
-    b = (float)clamp(_b, -50.0f, 250.0f); // 1 and -1  sample
-    c = (float)clamp(_c, -50.0f, 250.0f); // 2 and -2 sample
-    b = (b - 16.0f) / 219.0f;
-    c = (c - 16.0f) / 219.0f;
+    a = 1.0; // 0 sample = 1
+    b = (double)clamp(_b, -50.0, 250.0); // 1 and -1  sample
+    c = (double)clamp(_c, -50.0, 250.0); // 2 and -2 sample
+    b = (b - 16.0) / 219.0;
+    c = (c - 16.0) / 219.0;
 }
 
 double UserDefined2Filter::sinc(double value)
 {
  
-    if (value > 0.000001 || value < -0.000001)
+    if (fabs(value)>0.000001)
     {
         value *= M_PI;
-        return sin(value) / value;
+        return sin(value)/value;
     }
-    else
-    {
-        return 1.0;
-    }
+    else return 1.0;
 }
 
 double UserDefined2Filter::f(double x)
 {
     x = fabs(x);
 
-    if (x <= 3) // ?
+    if (x<=3) // ?
     {
-        return c * sinc(x + 2) + b * sinc(x + 1) + a * sinc(x) + b * sinc(x - 1) + c * sinc(x - 2);
+        return c*sinc(x+2) + b*sinc(x+1) + a*sinc(x) + b*sinc(x-1) + c*sinc(x-2);
     }
-    else
-        return 0;
+    else return 0;
 
 }
 

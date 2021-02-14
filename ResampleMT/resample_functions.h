@@ -304,13 +304,13 @@ class UserDefined2Filter : public ResamplingFunction
 	 **/
 {
 public:
-	UserDefined2Filter(float _b = 121.0, float _c = 19.0);
+	UserDefined2Filter(double _b = 121.0, double _c = 19.0);
 	double f(double x);
 	double support() { return 2.0; }
 
 private:
 	double sinc(double value);
-	float a, b, c;
+	double a, b, c;
 };
 
 #endif  // __Reample_Functions_H__
