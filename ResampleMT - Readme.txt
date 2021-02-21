@@ -18,20 +18,19 @@ GaussResizeMT
 SincResizeMT
 SinPowResizeMT (same parameters than Gauss, default param 2.5)
 SincLin2ResizeMT (same parameters than Sinc, default param 15)
-
 UserDefined2ResampleMT (Same parameters as BicubicResize)
-Control values are b and c as floats in range -50..250. 
-Default values are b=121, c=19. b and c parameters are 2 and 3 members of impulse response of filter defined at +-2 samples
-range. Middle (first) member = 1.0, i.e. 235 in 8bit video limited range encoding. To view how it contol sharpness and ringing
- and 'near peaking' better use web-scripting application at Documentation/sig_rest_en_sym.html. b and c paramters equal 
-to 6 and 7 samples started from 1st from the left. Samples values input and processing or 3 and 4 are interconneted internally to 
-represent actual filter procesing. Curve at the graph represent resulted symmetrical impulse responce.
-Mouse cursor and dragging for sliders may be used to set samples values.
-Examples: 
-b=126 c=22 - medium soft, almost no ringing.
-b=102 c=2 - sharper, small local peaking.
-b=68 c=-30 - more sharper, stronger local peaking.
-b=82 c=20 - sharp but lots of far ringing. Not for using.
+  Control values are b and c as floats in range -50..250. 
+  Default values are b=121, c=19. b and c parameters are 2 and 3 members of impulse response of filter defined at +-2 samples
+  range. Middle (first) member = 1.0, i.e. 235 in 8bit video limited range encoding. To view how it contol sharpness and ringing
+  and 'near peaking' better use web-scripting application at Documentation/sig_rest_en_sym.html. b and c paramters equal 
+  to 6 and 7 samples started from 1st from the left. Samples values input and processing or 3 and 4 are interconneted internally to 
+  represent actual filter procesing. Curve at the graph represent resulted symmetrical impulse responce.
+  Mouse cursor and dragging for sliders may be used to set samples values.
+  Examples: 
+  b=126 c=22 - medium soft, almost no ringing.
+  b=102 c=2 - sharper, small local peaking.
+  b=68 c=-30 - more sharper, stronger local peaking.
+  b=82 c=20 - sharp but lots of far ringing. Not for using.
 
 
 Parameters are exactly the same than the orignal resampling functions, and in the same order, so they are totaly
