@@ -31,6 +31,7 @@ UserDefined2ResizeMT (Same parameters as BicubicResize)
   b=102 c=2 - sharper, small local peaking.
   b=68 c=-30 - more sharper, stronger local peaking.
   b=82 c=20 - sharp but lots of far ringing. Not for using.
+  Recommended b,c values for UserDefined2Resize and more in bc_rec.png and bcde_rec.png.
 
 
 Parameters are exactly the same than the orignal resampling functions, and in the same order, so they are totaly
