@@ -306,7 +306,7 @@ class UserDefined2Filter : public ResamplingFunction
 	 **/
 {
 public:
-	UserDefined2Filter(double _b = 121.0, double _c = 19.0, double _s = 2.2);
+	UserDefined2Filter(double _b = 121.0, double _c = 19.0, double _s = 2.3);
 	double f(double x);
 	double support() { return s; }
 
