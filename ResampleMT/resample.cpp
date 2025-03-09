@@ -5029,10 +5029,14 @@ AVSValue __cdecl FilteredResizeMT::Create_Spline64Resize(AVSValue args, void*, I
 
 AVSValue __cdecl FilteredResizeMT::Create_GaussianResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-  GaussianFilter f(args[7].AsFloat(30.0f));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),
+//  GaussianFilter f(args[7].AsFloat(30.0f));
+	GaussianFilter f(args[7].AsFloat(30.0f), args[8].AsFloat(2.0f), args[9].AsFloat(4.0f));
+/*  return CreateResize(args[0].AsClip(), args[1].AsInt(), args[2].AsInt(), args[8].AsInt(0),
 	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);
+	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);*/
+	return CreateResize(args[0].AsClip(), args[1].AsInt(), args[2].AsInt(), args[10].AsInt(0),
+		args[11].AsBool(true), args[12].AsBool(true), args[13].AsBool(false), args[14].AsBool(false),
+		args[15].AsInt(0), args[16].AsInt(1), false, 0, 0, args[17].AsInt(6), &args[3], &f, env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_SincResize(AVSValue args, void*, IScriptEnvironment* env)
@@ -5218,7 +5222,7 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline36Resize, 0);
 	env->AddFunction("Spline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[threads]i" \
 		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline64Resize, 0);
-	env->AddFunction("GaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[threads]i" \
+	env->AddFunction("GaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[b]f[s]f[threads]i" \
 		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_GaussianResize, 0);
 	env->AddFunction("SincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[threads]i" \
 		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_SincResize, 0);
