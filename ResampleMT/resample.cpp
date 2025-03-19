@@ -362,9 +362,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 {
   int filter_sz;
 
-  src_width  = vi.width;
   src_height = vi.height;
-  dst_width  = target_width;
   dst_height = vi.height;
   
   pixelsize = (uint8_t)vi.ComponentSize(); // AVS16
@@ -383,6 +381,9 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 #ifdef AVX2_BUILD_POSSIBLE
   Enable_AVX2 = avsp && ((env->GetCPUFlags() & CPUF_AVX2)!=0);
 #endif
+
+  src_width = vi.IsPlanar() ? vi.width : vi.BytesFromPixels(vi.width)/pixelsize;
+  dst_width = vi.IsPlanar() ? target_width : vi.BytesFromPixels(target_width)/pixelsize;
 
 	if ((range_mode!=1) && (range_mode!=4))
 	{
@@ -431,9 +432,6 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	
 	const int shift_w = (!grey && vi.IsPlanar() && !isRGBPfamily) ? vi.GetPlaneWidthSubsampling(PLANAR_U) : 0;
 	const int shift_h = (!grey && vi.IsPlanar() && !isRGBPfamily) ? vi.GetPlaneHeightSubsampling(PLANAR_U) : 0;
-
-	const int src_width = vi.IsPlanar() ? vi.width : vi.BytesFromPixels(vi.width)/pixelsize;
-	const int dst_width = vi.IsPlanar() ? target_width : vi.BytesFromPixels(target_width)/pixelsize;
 
 	if (vi.height<32) threads_number=1;
 	else threads_number=threads;
@@ -2388,7 +2386,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 				{
 					if (!desample)
 					{
-						AVSValue sargs[6] = {result,int(subrange_left),0,int(subrange_width),vi.height,true};
+						AVSValue sargs[6] = {result,int(subrange_left),0,int(subrange_width),target_height,true};
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
@@ -2701,7 +2699,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 				{
 					if (!desample)
 					{
-						AVSValue sargs[6] = {result,0,int(subrange_top),vi.width,int(subrange_height),true};
+						AVSValue sargs[6] = {result,0,int(subrange_top),target_width,int(subrange_height),true};
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
@@ -2745,7 +2743,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 				{
 					if (!desample)
 					{
-						AVSValue sargs[6] = {result,int(subrange_left),0,int(subrange_width),vi.height,true};
+						AVSValue sargs[6] = {result,int(subrange_left),0,int(subrange_width),target_height,true};
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
@@ -2786,7 +2784,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 				{
 					if (!desample)
 					{
-						AVSValue sargs[6] = {result,0,int(subrange_top),vi.width,int(subrange_height),true};
+						AVSValue sargs[6] = {result,0,int(subrange_top),target_width,int(subrange_height),true};
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
