@@ -78,6 +78,7 @@ static void resize_v_planar_pointresize(BYTE* dst, const BYTE* src, int dst_pitc
 static void resize_v_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
 	const int filter_size = program->filter_size;
+	const int kernel_size = program->filter_size_real;
 	const short *current_coeff = program->pixel_coefficient+filter_size*MinY;
 
 	const int val_min = (range==1) ? 0 : 16;
@@ -96,7 +97,7 @@ static void resize_v_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 			{
 				int result = 0;
 
-				for (int i = 0; i < filter_size; i++)
+				for (int i = 0; i < kernel_size; i++)
 					result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 
 				result = (result+Offset) >> FPScale8bits;
@@ -118,7 +119,7 @@ static void resize_v_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 			{
 				int result = 0;
 
-				for (int i = 0; i < filter_size; i++)
+				for (int i = 0; i < kernel_size; i++)
 					result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 
 				result = (result+Offset) >> FPScale8bits;
@@ -136,6 +137,7 @@ static void resize_v_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 static void resize_v_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const float *current_coeff = program->pixel_coefficient_float+filter_size*MinY;
 
   const float *src0 = (float *)src;
@@ -151,7 +153,7 @@ static void resize_v_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int s
 	{
       float result = 0;
 
-      for (int i = 0; i < filter_size; i++)
+      for (int i = 0; i < kernel_size; i++)
 		result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 
       dst0[x] = result;
@@ -166,6 +168,7 @@ static void resize_v_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int s
 static void resize_v_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
 	const int filter_size = program->filter_size;
+	const int kernel_size = program->filter_size_real;
 	const short *current_coeff = program->pixel_coefficient+filter_size*MinY;
 
 	const uint16_t *src0 = (uint16_t *)src;
@@ -186,7 +189,7 @@ static void resize_v_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int s
 		{
 			__int64 result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 
 			result = (result+Offset) >> FPScale16bits;
@@ -218,6 +221,7 @@ __forceinline static void resize_v_create_pitch_table(int* table, int pitch, int
 static void resize_h_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   int y_src_pitch=0,y_dst_pitch=0;
   
 	const int val_min = (range==1) ? 0 : 16;
@@ -239,7 +243,7 @@ static void resize_h_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 				const int begin = program->pixel_offset[x];
 				int result = 0;
 		  
-				for (int i = 0; i < filter_size; i++)
+				for (int i = 0; i < kernel_size; i++)
 	    			result+=(src+y_src_pitch)[(begin+i)]*current_coeff[i];
 		
 				result = (result + Offset) >> FPScale8bits;
@@ -262,7 +266,7 @@ static void resize_h_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 				const int begin = program->pixel_offset[x];
 				int result = 0;
 		  
-				for (int i = 0; i < filter_size; i++)
+				for (int i = 0; i < kernel_size; i++)
 	    			result+=(src+y_src_pitch)[(begin+i)]*current_coeff[i];
 		
 				result = (result + Offset) >> FPScale8bits;
@@ -281,6 +285,7 @@ static void resize_h_c_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src
 static void resize_h_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   int y_src_pitch=0,y_dst_pitch=0;
   const uint16_t *src0 = (uint16_t *)src;
   uint16_t *dst0 = (uint16_t *)dst;
@@ -303,7 +308,7 @@ static void resize_h_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int s
 			const int begin = program->pixel_offset[x];
 			__int64 result = 0;
 		  
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result+=(src0+y_src_pitch)[(begin+i)]*current_coeff[i];
 		  
 			result = (result + Offset) >> FPScale16bits;
@@ -320,6 +325,7 @@ static void resize_h_c_planar_s(BYTE* dst, const BYTE* src, int dst_pitch, int s
 static void resize_h_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   int y_src_pitch=0,y_dst_pitch=0;
   const float *src0=(float *)src;
   float *dst0=(float *)dst;
@@ -336,7 +342,7 @@ static void resize_h_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int s
 		  const int begin = program->pixel_offset[x];
 		  float result = 0;
 		  
-		  for (int i = 0; i < filter_size; i++)
+		  for (int i = 0; i < kernel_size; i++)
 			  result+=(src0+y_src_pitch)[(begin+i)]*current_coeff[i];
 		  
 		  (dst0 + y_dst_pitch)[x] = result;
@@ -439,10 +445,10 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
   // Main resampling program
   int SizeH;
 
-  if (desample) resampling_program_luma = func->GetDesamplingProgram(target_width, subrange_left, subrange_width, vi.width, bits_per_pixel, accuracy, 0, shift_w, SizeH, env);
+  if (desample) resampling_program_luma = func->GetDesamplingProgram(target_width, subrange_left, subrange_width, vi.width, bits_per_pixel, 0.5, 0.5, accuracy, 0, shift_w, SizeH, env);
   else
   {
-	  resampling_program_luma = func->GetResamplingProgram(vi.width, subrange_left, subrange_width, target_width, bits_per_pixel, env);
+	  resampling_program_luma = func->GetResamplingProgram(vi.width, subrange_left, subrange_width, target_width, bits_per_pixel, 0.5, 0.5, env);
 	  SizeH=dst_width;
   }
   
@@ -484,6 +490,8 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 		  subrange_width  / div,
 	      vi.width   >> shift_w,
 		  bits_per_pixel,
+		  0.5,
+		  0.5,
 		  accuracy,SizeH,shift_w,SizeOut,
 		  env);
 		if (SizeOut==-1)
@@ -501,6 +509,8 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 		  subrange_width  / div,
 	      target_width   >> shift_w,
 		  bits_per_pixel,
+		  0.5,
+		  0.5,
 		  env);
 	}
 
@@ -959,23 +969,18 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
 ResamplerH FilteredResizeH::GetResampler(bool aligned, ResamplingProgram* program, IScriptEnvironment* env)
 {
+	resize_prepare_coeffs(program, env, 8);
+
 	if (pixelsize==1)
 	{
 		if (Enable_SSSE3)
 		{
 #ifdef AVX2_BUILD_POSSIBLE				
-			if (Enable_AVX2)
-			{
-				// make the resampling coefficient array mod16 friendly for simd, padding non-used coeffs with zeros
-				resize_h_prepare_coeff_8or16(program,env,16);
-				return resizer_h_avx2_generic_uint8_t;
-			}
+			if (Enable_AVX2) return resizer_h_avx2_generic_uint8_t;
 			else
 #endif			
 			{
-				// make the resampling coefficient array mod8 friendly for simd, padding non-used coeffs with zeros
-				resize_h_prepare_coeff_8or16(program,env,8);
-				if (program->filter_size>8) return resizer_h_ssse3_generic;
+				if (program->filter_size_real>8) return resizer_h_ssse3_generic;
 				else return resizer_h_ssse3_8;
 			}
 		}
@@ -985,7 +990,6 @@ ResamplerH FilteredResizeH::GetResampler(bool aligned, ResamplingProgram* progra
 	{ 
 		if (Enable_SSSE3)
 		{
-			resize_h_prepare_coeff_8or16(program,env,8); // alignment of 8 is enough for AVX2 uint16_t as well
 #ifdef AVX2_BUILD_POSSIBLE				
 			if (Enable_AVX2)
 			{
@@ -1013,10 +1017,8 @@ ResamplerH FilteredResizeH::GetResampler(bool aligned, ResamplingProgram* progra
 	{ //if (pixelsize == 4)
 		if (Enable_SSSE3)
 		{
-			resize_h_prepare_coeff_8or16(program,env,ALIGN_FLOAT_RESIZER_COEFF_SIZE); // alignment of 8 is enough for AVX2 float as well
-
-			const int filtersizealign8 = AlignNumber(program->filter_size,8);
-			const int filtersizemod8 = program->filter_size & 7;
+			const int filtersizealign8 = AlignNumber(program->filter_size_real,8);
+			const int filtersizemod8 = program->filter_size_real & 7;
 
 #ifdef AVX2_BUILD_POSSIBLE
 			if (Enable_AVX2)
@@ -1236,10 +1238,10 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 
   if (ShiftC==0) ShiftC=shift_h;
 
-  if (desample) resampling_program_luma  = func->GetDesamplingProgram(target_height, subrange_top, subrange_height, vi.height, bits_per_pixel, accuracy, ChromaS, ShiftC, SizeV, env);
+  if (desample) resampling_program_luma  = func->GetDesamplingProgram(target_height, subrange_top, subrange_height, vi.height, bits_per_pixel, 0.5, 0.5, accuracy, ChromaS, ShiftC, SizeV, env);
   else
   {
-	  resampling_program_luma  = func->GetResamplingProgram(vi.height, subrange_top, subrange_height, target_height, bits_per_pixel, env);
+	  resampling_program_luma  = func->GetResamplingProgram(vi.height, subrange_top, subrange_height, target_height, bits_per_pixel, 0.5, 0.5, env);
 	  SizeV=target_height;
   }
 
@@ -1289,6 +1291,8 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 				                      subrange_height / div,
 					                  vi.height  >> shift_h,
 									  bits_per_pixel,
+									  0.5,
+									  0.5,
 									  accuracy,SizeV,shift_h,SizeOut,
 						              env);
 		if (SizeOut==-1)
@@ -1306,6 +1310,8 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 				                      subrange_height / div,
 					                  target_height  >> shift_h,
 									  bits_per_pixel,
+									  0.5,
+									  0.5,
 						              env);
 	}
 	if (resampling_program_chroma==NULL)
@@ -1335,12 +1341,12 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 		env->ThrowError("ResizeVMT: Source chroma height (%d) is too small for this resizing method, must be minimum of %d!",h_UV,filter_sz);
 	}
 	
-    resampler_chroma_aligned = GetResampler(true,filter_storage_chroma_aligned,resampling_program_chroma);
-    resampler_chroma_unaligned = GetResampler(false,filter_storage_chroma_unaligned,resampling_program_chroma);
+    resampler_chroma_aligned = GetResampler(true,resampling_program_chroma,env);
+    resampler_chroma_unaligned = GetResampler(false,resampling_program_chroma,env);
   }
 
-  resampler_luma_aligned   = GetResampler(true,filter_storage_luma_aligned,resampling_program_luma);
-  resampler_luma_unaligned = GetResampler(false,filter_storage_luma_unaligned,resampling_program_luma);
+  resampler_luma_aligned   = GetResampler(true,resampling_program_luma,env);
+  resampler_luma_unaligned = GetResampler(false,resampling_program_luma,env);
 
   threads_number=CreateMTData(threads_number,work_width,vi.height,work_width,SizeV,shift_w,shift_h);
 
@@ -1923,9 +1929,11 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 }
 
 
-ResamplerV FilteredResizeV::GetResampler(bool aligned,void*& storage, ResamplingProgram* program)
+ResamplerV FilteredResizeV::GetResampler(bool aligned, ResamplingProgram* program, IScriptEnvironment* env)
 {
-  if (program->filter_size==1)
+  resize_prepare_coeffs(program, env, 8); 
+
+  if (program->filter_size_real==1)
   {
     // Fast pointresize
     switch (pixelsize) // AVS16
@@ -2159,7 +2167,7 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
   const int shift = (!grey && vi.IsPlanar() && !isRGBPfamily) ? vi.GetPlaneWidthSubsampling(PLANAR_U) : 0;
   int SizeH;
 
-  if (desample) SizeH=f->GetDesamplingData(target_width, subrange_left, subrange_width, vi.width,bits_per_pixel,shift,env);
+  if (desample) SizeH=f->GetDesamplingData(target_width, subrange_left, subrange_width, vi.width,bits_per_pixel, 0.5, 0.5,shift,env);
   else SizeH=target_width;
 
   if (SizeH==-1) env->ThrowError("ResizeMT: Error while GetDesamplingData");

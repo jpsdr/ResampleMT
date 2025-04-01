@@ -48,7 +48,8 @@
 //-------- 256 bit uint8_t Verticals
 void resize_v_avx2_planar_uint8_t(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
-  int filter_size = program->filter_size;
+  const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
 
   __m256i zero = _mm256_setzero_si256();
@@ -72,7 +73,7 @@ void resize_v_avx2_planar_uint8_t(BYTE* dst, const BYTE* src, int dst_pitch, int
 
       const BYTE* src2_ptr = src_ptr + x;
 
-      for (int i = 0; i < filter_size; i++)
+      for (int i = 0; i < kernel_size; i++)
 	  {
         __m256i src_p = _mm256_load_si256(reinterpret_cast<const __m256i*>(src2_ptr));
 
@@ -138,7 +139,7 @@ __forceinline static void process_chunk_v_uint16_t_256(const uint16_t *src2_ptr,
 template<bool lessthan16bit, int _filter_size_numOfFullBlk8, int filtersizemod8>
 void internal_resize_v_avx2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size >> 3);
+  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size_real >> 3);
   short *current_coeff = program->pixel_coefficient + program->filter_size*MinY;
   const int filter_size_numOfFullBlk8_8 = filter_size_numOfFullBlk8 << 3;
 
@@ -248,7 +249,7 @@ void internal_resize_v_avx2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int ds
 	{
       int64_t result64 = Offset; // rounder
       const uint16_t* src2_ptr = src_ptr + x;
-      for (int i = 0; i < program->filter_size; i++)
+      for (int i = 0; i < program->filter_size_real; i++)
 	  {
         //result64 += (src_ptr + pitch_table[i] / sizeof(uint16_t))[x] * (int64_t)current_coeff[i];
         result64 += (int)(*src2_ptr) * (int64_t)current_coeff[i];
@@ -276,7 +277,8 @@ __attribute__((__target__("fma")))
 void internal_resize_v_avx2_planar_float(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   // 1..8: special case for compiler optimization
-  const int filter_size = _filtersize >= 1 ? _filtersize : program->filter_size;
+  const int filter_size = program->filter_size;
+  const int kernel_size = _filtersize >= 1 ? _filtersize : program->filter_size_real;
   const float *current_coeff_float = program->pixel_coefficient_float + filter_size*MinY;
 
   int wMod16 = (width >> 4) << 4; // float: 16 at a time
@@ -289,7 +291,7 @@ void internal_resize_v_avx2_planar_float(BYTE* dst0, const BYTE* src0, int dst_p
   const int src_pitch3 = src_pitch*3;
   const int src_pitch4 = src_pitch << 2;
 
-  const int fsmod4 = (filter_size >> 2) << 2;
+  const int fsmod4 = (kernel_size >> 2) << 2;
   for (int y = MinY; y < MaxY; y++)
   {
     int offset = program->pixel_offset[y];
@@ -343,7 +345,7 @@ void internal_resize_v_avx2_planar_float(BYTE* dst0, const BYTE* src0, int dst_p
       }
 
       // one-by-one
-      for (int i = fsmod4; i < filter_size; i++)
+      for (int i = fsmod4; i < kernel_size; i++)
 	  {
         __m256 src_single_lo = _mm256_load_ps(reinterpret_cast<const float*>(src2_ptr)); // float  8*32=256 8 pixels at a time
         __m256 src_single_hi = _mm256_load_ps(reinterpret_cast<const float*>(src2_ptr + 8));
@@ -396,7 +398,7 @@ void internal_resize_v_avx2_planar_float(BYTE* dst0, const BYTE* src0, int dst_p
       }
 
       // one-by-one
-      for (int i = fsmod4; i < filter_size; i++)
+      for (int i = fsmod4; i < kernel_size; i++)
 	  {
         __m256 src_single_lo = _mm256_load_ps(reinterpret_cast<const float*>(src2_ptr)); // float  8*32=256 8 pixels at a time
         __m256 coeff = _mm256_broadcast_ss(reinterpret_cast<const float*>(current_coeff_float + i)); // loads 1, fills all 8 floats
@@ -415,7 +417,7 @@ void internal_resize_v_avx2_planar_float(BYTE* dst0, const BYTE* src0, int dst_p
 	{
       float result = 0;
       const float* src2_ptr = src_ptr + x;
-      for (int i = 0; i < filter_size; i++)
+      for (int i = 0; i < kernel_size; i++)
 	  {
         result += (*src2_ptr) * current_coeff_float[i];
         src2_ptr += src_pitch;
@@ -435,7 +437,7 @@ void internal_resize_v_avx2_planar_float(BYTE* dst0, const BYTE* src0, int dst_p
 void resize_v_avx2_planar_float(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   // 1..8: special case for compiler optimization
-  switch (program->filter_size)
+  switch (program->filter_size_real)
   {
   case 1: 
     internal_resize_v_avx2_planar_float<1>(dst0,src0,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -499,7 +501,7 @@ void resize_v_avx2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int dst_pitch, 
 {
   // template<bool lessthan16bit, int _filter_size_numOfFullBlk8, int filtersizemod8>
   // filtersize 1..16: to template for optimization
-  switch (program->filter_size)
+  switch (program->filter_size_real)
   {
   case 1:
     internal_resize_v_avx2_planar_uint16_t<lessthan16bit,0,1>(dst0,src0,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -547,7 +549,7 @@ void resize_v_avx2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int dst_pitch, 
     internal_resize_v_avx2_planar_uint16_t<lessthan16bit,1,7>(dst0,src0,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
     break;
   default:
-    switch (program->filter_size & 7)
+    switch (program->filter_size_real & 7)
 	{
     case 0:
       internal_resize_v_avx2_planar_uint16_t<lessthan16bit,-1,0>(dst0,src0,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -597,7 +599,7 @@ __forceinline static void process_two_16pixels_h_uint8_t(const uint8_t *src, int
 template<int filtersizealigned16>
 static void internal_resizer_h_avx2_generic_uint8_t(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfBlk16 = (filtersizealigned16 >= 1) ? filtersizealigned16 : (AlignNumber(program->filter_size,16) >> 4);
+  const int filter_size_numOfBlk16 = (filtersizealigned16 >= 1) ? filtersizealigned16 : (AlignNumber(program->filter_size_real,16) >> 4);
   __m256i zero = _mm256_setzero_si256();
 
   __m256i rounder256_1 = _mm256_setr_epi32(1 << (FPScale8bits - 1), 0, 0, 0, 0, 0, 0, 0);
@@ -728,7 +730,7 @@ __attribute__((__target__("fma")))
 #endif
 void resizer_h_avx2_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size,8) >> 3);
+  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real,8) >> 3);
 
   const float *src = reinterpret_cast<const float *>(src8);
   float *dst = reinterpret_cast<float *>(dst8);
@@ -925,7 +927,7 @@ template<bool lessthan16bit, int filtersizealigned8>
 void internal_resizer_h_avx2_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
   // 1 and 2: special case for compiler optimization
-  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size,8) >> 3);
+  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real,8) >> 3);
   const int incFilterSize = filter_size_numOfBlk8 << 3; // skip every 2nd coeffs (two pixels)
 
   const __m256i zero = _mm256_setzero_si256();
@@ -1020,7 +1022,7 @@ void internal_resizer_h_avx2_generic_uint16_t(BYTE* dst8, const BYTE* src8, int 
 
 void resizer_h_avx2_generic_uint8_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfBlk16 = AlignNumber(program->filter_size,16) >> 4;
+  const int filter_size_numOfBlk16 = AlignNumber(program->filter_size_real,16) >> 4;
 
   if (filter_size_numOfBlk16 == 1)
     internal_resizer_h_avx2_generic_uint8_t<1>(dst8,src8,dst_pitch,src_pitch,program,width,height,bits_per_pixel,range,mode_YUY2);
@@ -1038,7 +1040,7 @@ void resizer_h_avx2_generic_uint8_t(BYTE* dst8, const BYTE* src8, int dst_pitch,
 template<bool lessthan16bit>
 void resizer_h_avx2_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfBlk8 = AlignNumber(program->filter_size,8) >> 3;  // yes, 8 is used here
+  const int filter_size_numOfBlk8 = AlignNumber(program->filter_size_real,8) >> 3;  // yes, 8 is used here
 
   if (filter_size_numOfBlk8 == 1)
     internal_resizer_h_avx2_generic_uint16_t<lessthan16bit, 1>(dst8,src8,dst_pitch,src_pitch,program,width,height,bits_per_pixel,range,mode_YUY2);

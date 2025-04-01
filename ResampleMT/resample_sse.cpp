@@ -113,11 +113,12 @@ __forceinline __m128i _MM_MAX_EPU16(__m128i x, __m128i y)
 void resize_v_mmx_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
 
   const int wMod8 = (width >> 3) << 3;
-  const int sizeMod2 = (filter_size >> 1) << 1;
-  const bool notMod2 = sizeMod2 < filter_size;
+  const int sizeMod2 = (kernel_size >> 1) << 1;
+  const bool notMod2 = sizeMod2 < kernel_size;
 
   const int Offset = 1 << (FPScale8bits-1);
 
@@ -218,7 +219,7 @@ void resize_v_mmx_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitc
 		{
 			int result = 0;
 
-		    for (int i = 0; i < filter_size; i++)
+		    for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
@@ -231,7 +232,7 @@ void resize_v_mmx_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitc
 		{
 			int result = 0;
 
-		    for (int i = 0; i < filter_size; i++)
+		    for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
@@ -251,11 +252,12 @@ template<SSELoader load>
 void resize_v_sse2_planarT(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
   
   const int wMod16 = (width >> 4) << 4;
-  const int sizeMod2 = (filter_size >> 1) << 1;
-  const bool notMod2 = sizeMod2 < filter_size;
+  const int sizeMod2 = (kernel_size >> 1) << 1;
+  const bool notMod2 = sizeMod2 < kernel_size;
   const int Offset = 1 << (FPScale8bits-1);
 
   const __m128i zero = _mm_setzero_si128();
@@ -355,7 +357,7 @@ void resize_v_sse2_planarT(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
@@ -368,7 +370,7 @@ void resize_v_sse2_planarT(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
@@ -387,11 +389,12 @@ __attribute__((__target__("sse4.1")))
 void resize_v_sse2_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
   
   const int wMod16 = (width >> 4) << 4;
-  const int sizeMod2 = (filter_size >> 1) << 1;
-  const bool notMod2 = sizeMod2 < filter_size;
+  const int sizeMod2 = (kernel_size >> 1) << 1;
+  const bool notMod2 = sizeMod2 < kernel_size;
   const int Offset = 1 << (FPScale8bits-1);
 
   const __m128i zero = _mm_setzero_si128();
@@ -491,7 +494,7 @@ void resize_v_sse2_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pit
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
@@ -504,7 +507,7 @@ void resize_v_sse2_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pit
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
@@ -524,6 +527,7 @@ __attribute__((__target__("ssse3")))
 void resize_v_ssse3_planarT(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
   
   const int wMod16 = (width >> 4) << 4;
@@ -550,7 +554,7 @@ void resize_v_ssse3_planarT(BYTE* dst, const BYTE* src, int dst_pitch, int src_p
 
       const BYTE* src2_ptr = src_ptr+x;
       
-      for (int i = 0; i < filter_size; i++)
+      for (int i = 0; i < kernel_size; i++)
 	  {
         __m128i src_p = load(reinterpret_cast<const __m128i*>(src2_ptr));
 
@@ -592,7 +596,7 @@ void resize_v_ssse3_planarT(BYTE* dst, const BYTE* src, int dst_pitch, int src_p
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
@@ -605,7 +609,7 @@ void resize_v_ssse3_planarT(BYTE* dst, const BYTE* src, int dst_pitch, int src_p
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
@@ -625,6 +629,7 @@ __attribute__((__target__("sse4.1")))
 void resize_v_sse41_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
   
   const int wMod16 = (width >> 4) << 4;
@@ -651,7 +656,7 @@ void resize_v_sse41_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 
       const BYTE* src2_ptr = src_ptr+x;
       
-      for (int i = 0; i < filter_size; i++)
+      for (int i = 0; i < kernel_size; i++)
 	  {
         __m128i src_p = _mm_stream_load_si128(const_cast<__m128i*>(reinterpret_cast<const __m128i*>(src2_ptr)));
 
@@ -693,7 +698,7 @@ void resize_v_sse41_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
@@ -706,7 +711,7 @@ void resize_v_sse41_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
@@ -726,6 +731,7 @@ __attribute__((__target__("ssse3")))
 void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
+  const int kernel_size = program->filter_size_real;
   const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
   
   const int wMod16 = (width >> 4) << 4;
@@ -752,7 +758,7 @@ void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 
       const BYTE* src2_ptr = src_ptr+x;
       
-      for (int i = 0; i < filter_size; i++)
+      for (int i = 0; i < kernel_size; i++)
 	  {
         __m128i src_p = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(src2_ptr));
 
@@ -794,7 +800,7 @@ void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x03] : (result<val_min) ? val_min : result;
@@ -807,7 +813,7 @@ void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
 		{
 			int result = 0;
 
-			for (int i = 0; i < filter_size; i++)
+			for (int i = 0; i < kernel_size; i++)
 				result += (src_ptr+pitch_table[i])[x] * current_coeff[i];
 			result = (result+Offset) >> FPScale8bits;
 			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
@@ -820,58 +826,6 @@ void resize_v_ssse3_planar(BYTE* dst, const BYTE* src, int dst_pitch, int src_pi
   }
 }
 
-
-// make the resampling coefficient array mod8 friendly for simd, padding non-used coeffs with zeros
-void resize_h_prepare_coeff_8or16(ResamplingProgram* p,IScriptEnvironment* env,int alignFilterSize8or16)
-{
-  const int im0=p->target_size;
-  const int im1=p->filter_size;
-	const int filter_size = AlignNumber(im1,alignFilterSize8or16);
-	const int target_size = AlignNumber(im0,ALIGN_RESIZER_TARGET_SIZE);
-  p->filter_size_alignment = alignFilterSize8or16;
-
-  // Copy existing coeff
-  if (p->bits_per_pixel==32)
-  {
-	  float *new_coeff_float = (float *)_aligned_malloc(sizeof(float)*target_size*filter_size,64);
-
-	  if (new_coeff_float==NULL) env->ThrowError("ResizeHMT: Could not reserve memory in a resampler.");
-	  std::fill_n(new_coeff_float,target_size*filter_size,0.0f);
-
-	  float *dst_f=new_coeff_float,*src_f=p->pixel_coefficient_float;
-
-	  for (int i=0; i<im0; i++)
-	  {
-		  for (int j=0; j<im1; j++)
-			  dst_f[j]=src_f[j];
-
-		  dst_f += filter_size;
-		  src_f += im1;
-	  }
-	   myalignedfree(p->pixel_coefficient_float);
-	   p->pixel_coefficient_float = new_coeff_float;
-  }
-  else
-  {
-	  short *new_coeff = (short*)_aligned_malloc(sizeof(short)*target_size*filter_size,64);
-
-	  if (new_coeff==NULL) env->ThrowError("ResizeHMT: Could not reserve memory in a resampler.");
-	  memset(new_coeff,0,sizeof(short)*target_size*filter_size);
-
-	  short *dst=new_coeff,*src=p->pixel_coefficient;
-
-	  for (int i=0; i<im0; i++)
-	  {
-		  for (int j=0; j<im1; j++)
-			  dst[j]=src[j];
-
-		  dst += filter_size;
-		  src += im1;
-	  }
-	  myalignedfree(p->pixel_coefficient);
-	  p->pixel_coefficient = new_coeff;
-  }
-}
 
 //-------- 128 bit float Horizontals
 
@@ -928,7 +882,7 @@ __attribute__((__target__("ssse3")))
 #endif
 void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size, 8) >> 3);
+  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real, 8) >> 3);
 
   const float *src = reinterpret_cast<const float *>(src8);
   float *dst = reinterpret_cast<float *>(dst8);
@@ -1159,7 +1113,7 @@ __attribute__((__target__("ssse3")))
 static void internal_resizer_h_ssse3_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
   // 1 and 2: special case for compiler optimization
-  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size,8) >> 3);
+  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real,8) >> 3);
 
   const __m128i zero = _mm_setzero_si128();
   const __m128i shifttosigned = _mm_set1_epi16(-32768); // for 16 bits only
@@ -1245,7 +1199,7 @@ __attribute__((__target__("sse4.1")))
 static void internal_resizer_h_sse41_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
   // 1 and 2: special case for compiler optimization
-  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size,8) >> 3);
+  const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real,8) >> 3);
 
   const __m128i zero = _mm_setzero_si128();
   const __m128i shifttosigned = _mm_set1_epi16(-32768); // for 16 bits only
@@ -1329,7 +1283,7 @@ __attribute__((__target__("ssse3")))
 #endif
 void resizer_h_ssse3_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfBlk8 = AlignNumber(program->filter_size,8) >> 3;
+  const int filter_size_numOfBlk8 = AlignNumber(program->filter_size_real,8) >> 3;
 
   if (filter_size_numOfBlk8 == 1)
     internal_resizer_h_ssse3_generic_uint16_t<lessthan16bit, 1>(dst8,src8,dst_pitch,src_pitch,program,width,height,bits_per_pixel,range,mode_YUY2);
@@ -1350,7 +1304,7 @@ __attribute__((__target__("sse4.1")))
 #endif
 void resizer_h_sse41_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfBlk8 = AlignNumber(program->filter_size,8) >> 3;
+  const int filter_size_numOfBlk8 = AlignNumber(program->filter_size_real,8) >> 3;
 
   if (filter_size_numOfBlk8 == 1)
     internal_resizer_h_sse41_generic_uint16_t<lessthan16bit, 1>(dst8,src8,dst_pitch,src_pitch,program,width,height,bits_per_pixel,range,mode_YUY2);
@@ -1391,7 +1345,7 @@ __forceinline static void process_chunk_v_uint16_t(const uint16_t *src2_ptr, int
 template<bool lessthan16bit, int _filter_size_numOfFullBlk8, int filtersizemod8>
 void internal_resize_v_sse2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size >> 3);
+  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size_real >> 3);
   const short *current_coeff = program->pixel_coefficient + program->filter_size*MinY;
   const int filter_size_numOfFullBlk8_8 = filter_size_numOfFullBlk8 << 3;
 
@@ -1499,7 +1453,7 @@ void internal_resize_v_sse2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int ds
 	{
       int64_t result64 = Offset; // rounder
       const uint16_t* src2_ptr = src_ptr + x;
-      for (int i = 0; i < program->filter_size; i++)
+      for (int i = 0; i < program->filter_size_real; i++)
 	  {
         //result64 += (src_ptr + pitch_table[i] / sizeof(uint16_t))[x] * (int64_t)current_coeff[i];
         result64 += (int)(*src2_ptr) * (int64_t)current_coeff[i];
@@ -1525,7 +1479,7 @@ __attribute__((__target__("sse4.1")))
 #endif
 void internal_resize_v_sse41_planar_uint16_t(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size >> 3);
+  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size_real >> 3);
   const short *current_coeff = program->pixel_coefficient + program->filter_size*MinY;
   const int filter_size_numOfFullBlk8_8 = filter_size_numOfFullBlk8 << 3;
 
@@ -1633,7 +1587,7 @@ void internal_resize_v_sse41_planar_uint16_t(BYTE* dst0, const BYTE* src0, int d
 	{
       int64_t result64 = Offset; // rounder
       const uint16_t* src2_ptr = src_ptr + x;
-      for (int i = 0; i < program->filter_size; i++)
+      for (int i = 0; i < program->filter_size_real; i++)
 	  {
         //result64 += (src_ptr + pitch_table[i] / sizeof(uint16_t))[x] * (int64_t)current_coeff[i];
         result64 += (int)(*src2_ptr) * (int64_t)current_coeff[i];
@@ -1659,7 +1613,7 @@ void resize_v_sse2_planar_uint16_t(BYTE* dst, const BYTE* src, int dst_pitch, in
 {
   // template<bool lessthan16bit, int _filter_size_numOfFullBlk8, int filtersizemod8>
   // filtersize 1..16: to template for optimization
-  switch (program->filter_size)
+  switch (program->filter_size_real)
   {
   case 1:
     internal_resize_v_sse2_planar_uint16_t<lessthan16bit, 0, 1>(dst,src,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -1707,7 +1661,7 @@ void resize_v_sse2_planar_uint16_t(BYTE* dst, const BYTE* src, int dst_pitch, in
     internal_resize_v_sse2_planar_uint16_t<lessthan16bit, 1, 7>(dst,src,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
     break;
   default:
-    switch (program->filter_size & 7)
+    switch (program->filter_size_real & 7)
 	{
     case 0:
       internal_resize_v_sse2_planar_uint16_t<lessthan16bit, -1, 0>(dst,src,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -1750,7 +1704,7 @@ void resize_v_sse41_planar_uint16_t(BYTE* dst, const BYTE* src, int dst_pitch, i
 {
   // template<bool lessthan16bit, int _filter_size_numOfFullBlk8, int filtersizemod8>
   // filtersize 1..16: to template for optimization
-  switch (program->filter_size)
+  switch (program->filter_size_real)
   {
   case 1:
     internal_resize_v_sse41_planar_uint16_t<lessthan16bit, 0, 1>(dst,src,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -1798,7 +1752,7 @@ void resize_v_sse41_planar_uint16_t(BYTE* dst, const BYTE* src, int dst_pitch, i
     internal_resize_v_sse41_planar_uint16_t<lessthan16bit, 1, 7>(dst,src,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
     break;
   default:
-    switch (program->filter_size & 7)
+    switch (program->filter_size_real & 7)
 	{
     case 0:
       internal_resize_v_sse41_planar_uint16_t<lessthan16bit, -1, 0>(dst,src,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -1839,7 +1793,8 @@ template<int _filtersize>
 static void internal_resize_v_sse2_planar_float(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   // 1..8: special case for compiler optimization
-  const int filter_size = _filtersize >= 1 ? _filtersize : program->filter_size;
+  const int filter_size = program->filter_size;
+  const int kernel_size = _filtersize >= 1 ? _filtersize : program->filter_size_real;
   const float *current_coeff_float = program->pixel_coefficient_float + filter_size*MinY;
 
   const float* src = (float *)src0;
@@ -1850,7 +1805,7 @@ static void internal_resize_v_sse2_planar_float(BYTE* dst0, const BYTE* src0, in
   const int src_pitch3 = src_pitch*3;
   const int src_pitch4 = src_pitch << 2;
 
-  const int fsmod4 = (filter_size >> 2) << 2;
+  const int fsmod4 = (kernel_size >> 2) << 2;
   for (int y = MinY; y < MaxY; y++)
   {
     int offset = program->pixel_offset[y];
@@ -1904,7 +1859,7 @@ static void internal_resize_v_sse2_planar_float(BYTE* dst0, const BYTE* src0, in
       }
 
       // one-by-one
-      for (int i = fsmod4; i < filter_size; i++)
+      for (int i = fsmod4; i < kernel_size; i++)
 	  {
         __m128 src_single_lo = _mm_load_ps(reinterpret_cast<const float*>(src2_ptr));
         __m128 src_single_hi = _mm_load_ps(reinterpret_cast<const float*>(src2_ptr + 4));
@@ -1943,7 +1898,7 @@ static void internal_resize_v_sse2_planar_float(BYTE* dst0, const BYTE* src0, in
 void resize_v_sse2_planar_float(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
   // 1..8: special case for compiler optimization
-  switch (program->filter_size)
+  switch (program->filter_size_real)
   {
   case 1:
     internal_resize_v_sse2_planar_float<1>(dst,src,dst_pitch,src_pitch,program,width,bits_per_pixel,MinY,MaxY,pitch_table,storage,range,mode_YUY2);
@@ -1983,7 +1938,7 @@ __attribute__((__target__("ssse3")))
 #endif
 void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size = AlignNumber(program->filter_size,8) >> 3;
+  const int filter_size = AlignNumber(program->filter_size_real,8) >> 3;
   const __m128i zero = _mm_setzero_si128();
 
 	const int val_min = (range==1) ? 0 : 16;

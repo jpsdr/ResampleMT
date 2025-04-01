@@ -146,7 +146,8 @@ public:
 	int __stdcall SetCacheHints(int cachehints, int frame_range);
 
   //static ResamplerV GetResampler(int CPU, bool aligned,int pixelsize, int bits_per_pixel, void*& storage, ResamplingProgram* program);
-  ResamplerV GetResampler(bool aligned,void*& storage, ResamplingProgram* program);
+  //ResamplerV GetResampler(bool aligned,void*& storage, ResamplingProgram* program);
+  ResamplerV GetResampler(bool aligned, ResamplingProgram* program, IScriptEnvironment* env);
 
 private:
 	Public_MT_Data_Thread MT_Thread[MAX_MT_THREADS];
