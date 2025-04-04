@@ -52,6 +52,216 @@
 
 static ThreadPoolInterface *poolInterface;
 
+static bool is_paramstring_empty_or_auto(const char* param)
+{
+	if (param==nullptr) return true;
+	return (strcoll(param,"auto")==0); // true is match
+}
+
+static bool getChromaLocation(const char* chromaloc_name, IScriptEnvironment* env, ChromaLocation_e& _ChromaLocation)
+{
+	ChromaLocation_e index=AVS_CHROMA_UNUSED;
+
+	if (strcoll(chromaloc_name,"left")==0) index=AVS_CHROMA_LEFT;
+	if (strcoll(chromaloc_name,"center")==0) index=AVS_CHROMA_CENTER;
+	if (strcoll(chromaloc_name,"top_left")==0) index=AVS_CHROMA_TOP_LEFT;
+	if (strcoll(chromaloc_name,"top")==0) index=AVS_CHROMA_TOP; // not used in Avisynth
+	if (strcoll(chromaloc_name,"bottom_left")==0) index=AVS_CHROMA_BOTTOM_LEFT; // not used in Avisynth
+	if (strcoll(chromaloc_name,"bottom")==0) index=AVS_CHROMA_BOTTOM; // not used in Avisynth
+	if (strcoll(chromaloc_name,"dv")==0) index=AVS_CHROMA_DV; // Special to Avisynth
+	// compatibility
+	if (strcoll(chromaloc_name,"mpeg1")==0) index=AVS_CHROMA_CENTER;
+	if (strcoll(chromaloc_name,"mpeg2")==0) index=AVS_CHROMA_LEFT;
+	if (strcoll(chromaloc_name,"jpeg")==0) index=AVS_CHROMA_CENTER;
+
+	if (index!=AVS_CHROMA_UNUSED)
+	{
+		_ChromaLocation = index;
+		return true;
+	}
+
+	env->ThrowError("Unknown chroma placement");
+	// empty
+	return false;
+}
+
+static void chromaloc_parse_merge_with_props(const VideoInfo& vi, const char* chromaloc_name, const AVSMap* props, ChromaLocation_e& _ChromaLocation, ChromaLocation_e _ChromaLocation_Default, IScriptEnvironment* env)
+{
+	if (props!=nullptr)
+	{
+		if (vi.Is420() || vi.Is422() || vi.IsYV411())
+		{ // yes, YV411 can also have valid _ChromaLocation, if 'left'-ish one is given
+			if (env->propNumElements(props,"_ChromaLocation")>0)
+				_ChromaLocation_Default = (ChromaLocation_e)env->propGetIntSaturated(props,"_ChromaLocation",0,nullptr);
+		}
+		else
+		{
+			// Theoretically RGB and not subsampled formats must not have chroma location
+			if (env->propNumElements(props,"_ChromaLocation")>0)
+			{
+				// Uncommented for a while, just ignore when there is any
+				// env->ThrowError("Error: _ChromaLocation property found at a non-subsampled source.");
+			}
+		}
+	}
+
+	if (is_paramstring_empty_or_auto(chromaloc_name) || !getChromaLocation(chromaloc_name, env, _ChromaLocation))
+		_ChromaLocation = _ChromaLocation_Default;
+}
+
+// Borrowed from fmtconv
+// ChromaPlacement.cpp
+// Author : Laurent de Soras, 2015
+
+// Fixes the vertical chroma placement when the picture is interlaced.
+// ofs = ordinate to skip between TFF and BFF, relative to the chroma grid. A
+// single line of full-res picture is 0.25.
+static inline void ChromaPlacement_fix_itl(double& cp_v, bool interlaced_flag, bool top_flag, double ofs = 0.5)
+{
+  assert(cp_v >= 0);
+
+  if (interlaced_flag)
+  {
+    cp_v *= 0.5;
+    if (!top_flag) cp_v += ofs;
+  }
+}
+/*
+ss_h and ss_v are log2(subsampling)
+rgb_flag actually means that chroma subsampling doesn't apply.
+
+http://www.mir.com/DMG/chroma.html
+
+cp_* is the position of the sampling point relative to the frame
+top/left border, in the plane coordinates. For reference, the border
+of the frame is at 0.5 units of luma from the first luma sampling point.
+I. e., the luma sampling point is at the pixel's center.
+*/
+
+// PF added BOTTOM, BOTTOM_LEFT, TOP
+// Pass ChromaLocation_e::AVS_CHROMA_UNUSED for defaults
+// plane index 0:Y, 1:U, 2:V
+// cplace is a ChromaLocation_e constant
+static void ChromaPlacement_compute_cplace(double& cp_h, double& cp_v, ChromaLocation_e cplace, int plane_index, int ss_h, int ss_v, bool rgb_flag, bool interlaced_flag, bool top_flag)
+{
+  assert(cplace >= 0 || cplace == AVS_CHROMA_UNUSED);
+  assert(cplace < AVS_CHROMA_DV);
+  assert(ss_h >= 0);
+  assert(ss_v >= 0);
+  assert(plane_index >= 0);
+
+  // Generic case for luma, non-subsampled chroma and center (MPEG-1) chroma.
+  cp_h = 0.5;
+  cp_v = 0.5;
+  ChromaPlacement_fix_itl(cp_v, interlaced_flag, top_flag);
+
+  // Subsampled chroma
+  if (!rgb_flag && plane_index > 0)
+  {
+    if (ss_h > 0) // horizontal subsampling 420 411
+    {
+      if (cplace == AVS_CHROMA_LEFT // mpeg2
+        || cplace == AVS_CHROMA_DV
+        || cplace == AVS_CHROMA_TOP_LEFT
+        || cplace == AVS_CHROMA_BOTTOM_LEFT
+        )
+      {
+        cp_h = 0.5 / (1 << ss_h);
+      }
+    }
+
+    if (ss_v == 1) // vertical subsampling 420, 422
+    {
+      if (cplace == AVS_CHROMA_LEFT)
+      {
+        cp_v = 0.5;
+        ChromaPlacement_fix_itl(cp_v, interlaced_flag, top_flag);
+      }
+      else if (cplace == AVS_CHROMA_DV
+        || cplace == AVS_CHROMA_TOP_LEFT
+        || cplace == AVS_CHROMA_TOP
+        )
+      {
+        cp_v = 0.25;
+        ChromaPlacement_fix_itl(cp_v, interlaced_flag, top_flag, 0.25);
+
+        if (cplace == AVS_CHROMA_DV && plane_index == 2) // V
+        {
+          cp_v += 0.5;
+        }
+      }
+      else if (cplace == AVS_CHROMA_BOTTOM_LEFT
+        || cplace == AVS_CHROMA_BOTTOM
+        )
+      {
+        cp_v = 0.75;
+        ChromaPlacement_fix_itl(cp_v, interlaced_flag, top_flag, 0.25);
+      }
+    }  // ss_v == 1
+  }
+}
+
+// returns the requested horizontal or vertical pixel center position
+static void GetCenterShiftForResizers(double& center_pos_luma, double& center_pos_chroma, bool preserve_center, ChromaLocation_e chroma_placement, VideoInfo &vi, bool for_horizontal)
+{
+  double center_pos_h_luma = 0;
+  double center_pos_v_luma = 0;
+  // if not needed, these won't be used
+  double center_pos_h_chroma = 0;
+  double center_pos_v_chroma = 0;
+
+  // chroma, only if applicable
+  if (vi.IsPlanar() && vi.NumComponents() > 1 && !vi.IsRGB())
+  {
+    double cp_s_h = 0;
+    double cp_s_v = 0;
+
+    if (preserve_center)
+	{
+      // same for source and destination
+      int plane_index = 1; // U
+      int src_ss_h = vi.GetPlaneWidthSubsampling(PLANAR_U);
+      int src_ss_v = vi.GetPlaneHeightSubsampling(PLANAR_U);
+
+      ChromaLocation_e chromaplace = AVS_CHROMA_CENTER; // MPEG1
+
+      ChromaPlacement_compute_cplace(
+        cp_s_h, cp_s_v, chroma_placement, plane_index, src_ss_h, src_ss_v,
+        vi.IsRGB(),
+        false, // interlacing flag, we don't handle it here
+        false  // top_flag, we don't handle it here
+      );
+    }
+
+    center_pos_h_chroma = cp_s_h;
+    center_pos_v_chroma = cp_s_v;
+  }
+
+  // luma/rgb planes
+  if (preserve_center)
+  {
+    center_pos_h_luma = 0.5;
+    center_pos_v_luma = 0.5;
+  }
+  else
+  {
+    center_pos_h_luma = 0.0;
+    center_pos_v_luma = 0.0;
+  }
+
+  // fill return ref values
+  if (for_horizontal)
+  {
+    center_pos_luma = center_pos_h_luma;
+    center_pos_chroma = center_pos_h_chroma;
+  }
+  else
+  {
+    // vertical
+    center_pos_luma = center_pos_v_luma;
+    center_pos_chroma = center_pos_v_chroma;
+  }
+}
 
 /***************************************
  ***** Vertical Resizer Assembly *******
@@ -359,15 +569,13 @@ static void resize_h_c_planar_f(BYTE* dst, const BYTE* src, int dst_pitch, int s
 
 
 FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double subrange_width,int target_width,
-	uint8_t _threads,bool _sleep,int range_mode,bool desample,int accuracy, bool negativePrefetch,
-	bool _avsp, ResamplingFunction* func, IScriptEnvironment* env )
+	uint8_t _threads,bool _sleep,int range_mode,bool desample,int accuracy,bool negativePrefetch,
+	bool _avsp,bool preserve_center,ChromaLocation_e chroma_placement,ResamplingFunction* func,IScriptEnvironment* env )
   : GenericVideoFilter(_child),
   resampling_program_luma(NULL), resampling_program_chroma(NULL),
   filter_storage_luma(NULL), filter_storage_chroma(NULL),threads(_threads),sleep(_sleep),
   avsp(_avsp)
 {
-  int filter_sz;
-
   src_height = vi.height;
   dst_height = vi.height;
   
@@ -387,6 +595,10 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 #ifdef AVX2_BUILD_POSSIBLE
   Enable_AVX2 = avsp && ((env->GetCPUFlags() & CPUF_AVX2)!=0);
 #endif
+
+  double center_pos_h_luma;
+  double center_pos_h_chroma;
+  GetCenterShiftForResizers(center_pos_h_luma, center_pos_h_chroma, preserve_center, chroma_placement, vi, true); // True for horizontal
 
   src_width = vi.IsPlanar() ? vi.width : vi.BytesFromPixels(vi.width)/pixelsize;
   dst_width = vi.IsPlanar() ? target_width : vi.BytesFromPixels(target_width)/pixelsize;
@@ -445,10 +657,14 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
   // Main resampling program
   int SizeH;
 
-  if (desample) resampling_program_luma = func->GetDesamplingProgram(target_width, subrange_left, subrange_width, vi.width, bits_per_pixel, 0.5, 0.5, accuracy, 0, shift_w, SizeH, env);
+  if (desample) resampling_program_luma = func->GetDesamplingProgram(target_width, subrange_left, subrange_width, vi.width, bits_per_pixel,
+	  center_pos_h_luma, center_pos_h_luma, // for resizing it's the same for source and dest
+	  accuracy, 0, shift_w, SizeH, env);
   else
   {
-	  resampling_program_luma = func->GetResamplingProgram(vi.width, subrange_left, subrange_width, target_width, bits_per_pixel, 0.5, 0.5, env);
+	  resampling_program_luma = func->GetResamplingProgram(vi.width, subrange_left, subrange_width, target_width, bits_per_pixel,
+		  center_pos_h_luma, center_pos_h_luma, // for resizing it's the same for source and dest
+		  env);
 	  SizeH=dst_width;
   }
   
@@ -458,14 +674,6 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	  if (threads>1) poolInterface->DeAllocateAllThreads(true);
 	  if (desample) env->ThrowError("ResizeHMT: Error while GetDesamplingProgram for luma!");
 	  else env->ThrowError("ResizeHMT: Error while GetResamplingProgram for luma!");
-  }
-
-  filter_sz=resampling_program_luma->filter_size;
-  if (vi.width<filter_sz)
-  {
-	  FreeData();
-	  if (threads>1) poolInterface->DeAllocateAllThreads(true);
-	  env->ThrowError("ResizeHMT: Source luma width (%d) is too small for this resizing method, must be minimum of %d!",vi.width,filter_sz);
   }
 
   if (desample && ((SizeH>vi.width) || (SizeH==-1)))
@@ -490,8 +698,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 		  subrange_width  / div,
 	      vi.width   >> shift_w,
 		  bits_per_pixel,
-		  0.5,
-		  0.5,
+		  center_pos_h_chroma, center_pos_h_chroma, // horizontal
 		  accuracy,SizeH,shift_w,SizeOut,
 		  env);
 		if (SizeOut==-1)
@@ -509,8 +716,7 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 		  subrange_width  / div,
 	      target_width   >> shift_w,
 		  bits_per_pixel,
-		  0.5,
-		  0.5,
+		  center_pos_h_chroma, center_pos_h_chroma, // horizontal
 		  env);
 	}
 
@@ -523,14 +729,6 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
 	}
 
 	const int w_UV=vi.width >> shift_w;
-
-	filter_sz=resampling_program_chroma->filter_size;
-	if (w_UV<filter_sz)
-	{
-		FreeData();
-		if (threads>1) poolInterface->DeAllocateAllThreads(true);
-		env->ThrowError("ResizeHMT: Source chroma width (%d) is too small for this resizing method, must be minimum of %d!",w_UV,filter_sz);
-	}
 	
 	resampler_h_chroma = GetResampler(true,resampling_program_chroma,env);
   }
@@ -1155,7 +1353,7 @@ FilteredResizeH::~FilteredResizeH(void)
 
 FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subrange_height, int target_height,
 	uint8_t _threads,bool _sleep,int range_mode,bool desample,int accuracy,int ChromaS,uint8_t ShiftC, bool negativePrefetch,
-	bool _avsp,ResamplingFunction* func, IScriptEnvironment* env )
+	bool _avsp, bool preserve_center, ChromaLocation_e chroma_placement, bool ResizeH, ResamplingFunction* func, IScriptEnvironment* env )
   : GenericVideoFilter(_child),
     resampling_program_luma(NULL), resampling_program_chroma(NULL),
     src_pitch_table_luma(NULL), src_pitch_table_chromaU(NULL), src_pitch_table_chromaV(NULL),
@@ -1164,7 +1362,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
     filter_storage_chroma_aligned(NULL), filter_storage_chroma_unaligned(NULL),
 	sleep(_sleep),threads(_threads),avsp(_avsp)
 {
-	int16_t i,filter_sz;
+	int16_t i;
 
     pixelsize = (uint8_t)vi.ComponentSize(); // AVS16
 	grey = vi.IsY();
@@ -1182,6 +1380,10 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 #ifdef AVX2_BUILD_POSSIBLE
   Enable_AVX2 = avsp && ((env->GetCPUFlags() & CPUF_AVX2)!=0);
 #endif
+
+  double center_pos_v_luma;
+  double center_pos_v_chroma;
+  GetCenterShiftForResizers(center_pos_v_luma, center_pos_v_chroma, preserve_center, chroma_placement, vi, ResizeH); // False for vertical
 
 	if ((range_mode!=1) && (range_mode!=4))
 	{
@@ -1237,11 +1439,15 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
   int SizeV;
 
   if (ShiftC==0) ShiftC=shift_h;
-
-  if (desample) resampling_program_luma  = func->GetDesamplingProgram(target_height, subrange_top, subrange_height, vi.height, bits_per_pixel, 0.5, 0.5, accuracy, ChromaS, ShiftC, SizeV, env);
+																																						
+  if (desample) resampling_program_luma  = func->GetDesamplingProgram(target_height, subrange_top, subrange_height, vi.height, bits_per_pixel,
+	  center_pos_v_luma, center_pos_v_luma, // for resizing it's the same for source and dest
+	  accuracy, ChromaS, ShiftC, SizeV, env);
   else
   {
-	  resampling_program_luma  = func->GetResamplingProgram(vi.height, subrange_top, subrange_height, target_height, bits_per_pixel, 0.5, 0.5, env);
+	  resampling_program_luma  = func->GetResamplingProgram(vi.height, subrange_top, subrange_height, target_height, bits_per_pixel,
+		  center_pos_v_luma, center_pos_v_luma, // for resizing it's the same for source and dest
+		  env);
 	  SizeV=target_height;
   }
 
@@ -1251,14 +1457,6 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	  if (threads>1) poolInterface->DeAllocateAllThreads(true);
 	  if (desample) env->ThrowError("ResizeVMT: Error while GetDesamplingProgram for luma!");
 	  else env->ThrowError("ResizeVMT: Error while GetResamplingProgram for luma!");
-  }
-
-  filter_sz=resampling_program_luma->filter_size;
-  if (vi.height<filter_sz)
-  {
-	  FreeData();
-	  if (threads>1) poolInterface->DeAllocateAllThreads(true);
-	  env->ThrowError("ResizeVMT: Source luma height (%d) is too small for this resizing method, must be minimum of %d!",vi.height,filter_sz);
   }
 
   if (desample && ((SizeV>vi.height) || (SizeV==-1)))
@@ -1291,8 +1489,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 				                      subrange_height / div,
 					                  vi.height  >> shift_h,
 									  bits_per_pixel,
-									  0.5,
-									  0.5,
+									  center_pos_v_chroma, center_pos_v_chroma, // for resizing it's the same for source and dest
 									  accuracy,SizeV,shift_h,SizeOut,
 						              env);
 		if (SizeOut==-1)
@@ -1310,8 +1507,7 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 				                      subrange_height / div,
 					                  target_height  >> shift_h,
 									  bits_per_pixel,
-									  0.5,
-									  0.5,
+									  center_pos_v_chroma, center_pos_v_chroma, // for resizing it's the same for source and dest
 						              env);
 	}
 	if (resampling_program_chroma==NULL)
@@ -1333,14 +1529,6 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 
 	const int h_UV=vi.height >> shift_h;
 
-	filter_sz=resampling_program_chroma->filter_size;
-	if (h_UV<filter_sz)
-	{
-		FreeData();
-		if (threads>1) poolInterface->DeAllocateAllThreads(true);
-		env->ThrowError("ResizeVMT: Source chroma height (%d) is too small for this resizing method, must be minimum of %d!",h_UV,filter_sz);
-	}
-	
     resampler_chroma_aligned = GetResampler(true,resampling_program_chroma,env);
     resampler_chroma_unaligned = GetResampler(false,resampling_program_chroma,env);
   }
@@ -2070,26 +2258,30 @@ FilteredResizeV::~FilteredResizeV(void)
 
 PClip FilteredResizeMT::CreateResizeH(PClip clip, double subrange_left, double subrange_width, int target_width,
                     uint8_t _threads,bool _sleep,int range_mode,bool desample,int accuracy,bool negativePrefetch,
-					bool _avsp,ResamplingFunction* func,IScriptEnvironment* env)
+					bool _avsp,bool preserve_center,ChromaLocation_e chroma_placement,
+					ResamplingFunction* func,IScriptEnvironment* env)
 {
 	return new FilteredResizeH(clip, subrange_left, subrange_width, target_width,_threads,_sleep,range_mode,desample,
-		accuracy,negativePrefetch,_avsp,func, env);
+		accuracy,negativePrefetch,_avsp,preserve_center,chroma_placement,func, env);
 }
 
 
 PClip FilteredResizeMT::CreateResizeV(PClip clip, double subrange_top, double subrange_height, int target_height,
                     uint8_t _threads,bool _sleep,int range_mode,bool desample,int accuracy,int ChromaS,uint8_t ShiftC,
-					bool negativePrefetch,bool _avsp,ResamplingFunction* func,IScriptEnvironment* env)
+					bool negativePrefetch,bool _avsp,bool preserve_center,ChromaLocation_e chroma_placement,
+					bool ResizeH,ResamplingFunction* func,IScriptEnvironment* env)
 {
 	return new FilteredResizeV(clip, subrange_top, subrange_height, target_height,_threads,_sleep,range_mode,desample,
-		accuracy,ChromaS,ShiftC,negativePrefetch,_avsp,func, env);
+		accuracy,ChromaS,ShiftC,negativePrefetch,_avsp,preserve_center,chroma_placement,ResizeH,func,env);
 }
 
 
 PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_height, int force,int _threads,
 	bool _LogicalCores,bool _MaxPhysCores, bool _SetAffinity,bool _sleep,int prefetch,
 	int range_mode,bool desample,int accuracy,int order,int thread_level,
-	const AVSValue* args,ResamplingFunction* f,IScriptEnvironment* env)
+	const AVSValue* args,ResamplingFunction* f,
+	bool preserve_center,const char *placement_name,ChromaLocation_e forced_chroma_placement,
+	IScriptEnvironment* env)
 {
   // 0 - return unchanged if no resize needed
   // 1 - force H
@@ -2125,6 +2317,27 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
   const bool grey = vi.IsY();  
   const bool isAlphaChannel = vi.IsYUVA() || vi.IsPlanarRGBA();
   const uint8_t bits_per_pixel = (uint8_t)vi.BitsPerComponent();
+
+
+	bool has_at_least_v11=true;
+	try { env->CheckVersion(11); } catch (const AvisynthError&) { has_at_least_v11=false; }
+
+  // use forced_chroma_placement >= 0 and placement_name == nullptr together
+  ChromaLocation_e chroma_placement = forced_chroma_placement >= 0 ? forced_chroma_placement : AVS_CHROMA_UNUSED;
+  if (placement_name)
+  {
+    // no format-oriented defaults
+    if (vi.IsYV411() || vi.Is420() || vi.Is422())
+	{
+      // placement explicite parameter like in ConvertToXXX or Text
+      // input frame properties, if "auto"
+      // When called from ConvertToXXX, chroma is not involved.
+      auto frame0 = clip->GetFrame(0, env);
+      const AVSMap* props = has_at_least_v11 ? env->getFramePropsRO(frame0):nullptr;
+      chromaloc_parse_merge_with_props(vi, placement_name, props, /* ref*/chroma_placement, AVS_CHROMA_UNUSED /*default*/, env);
+    }
+  }
+
 
   if (vi.IsPlanar() && !grey && !isRGBPfamily)
   {
@@ -2380,9 +2593,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
-				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+					preserve_center,chroma_placement,false,f,env);
 			}
-			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+				preserve_center,chroma_placement,false,f,env);
 		}
 		if (!((subrange_left==0) && (subrange_width==target_width) && (subrange_width==vi.width) && !force_H))
 		{
@@ -2435,14 +2650,18 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							vu = env->Invoke(turnRightFunction,vu).AsClip();
 							vv = env->Invoke(turnRightFunction,vv).AsClip();
 							if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
-							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
 
 							VideoInfo vR = v.AsClip()->GetVideoInfo();
 							int ChromaS=vR.height >> shift;
 
-							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-							if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
+							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
+							if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
 							v = env->Invoke(turnLeftFunction,v).AsClip();
 							vu = env->Invoke(turnLeftFunction,vu).AsClip();
 							vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2456,14 +2675,16 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						else
 						{
 							result=env->Invoke(turnRightFunction,result).AsClip();
-							result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+							result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
 							result=env->Invoke(turnLeftFunction,result).AsClip();
 						}
 					}
 					else
 					{
 						result=env->Invoke(turnLeftFunction,result).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 						result=env->Invoke(turnRightFunction,result).AsClip();
 					}
 				}
@@ -2505,14 +2726,18 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						vu = env->Invoke(turnRightFunction,vu).AsClip();
 						vv = env->Invoke(turnRightFunction,vv).AsClip();
 						if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
-						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 
 						VideoInfo vR = v.AsClip()->GetVideoInfo();
 						int ChromaS=vR.height >> shift;
 
-						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-						if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
+						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
+						if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 						v = env->Invoke(turnLeftFunction,v).AsClip();
 						vu = env->Invoke(turnLeftFunction,vu).AsClip();
 						vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2526,14 +2751,16 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					else
 					{
 						result=env->Invoke(turnRightFunction,result).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 						result=env->Invoke(turnLeftFunction,result).AsClip();
 					}
 				}
 				else
 				{
 					result=env->Invoke(turnLeftFunction,result).AsClip();
-					result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+					result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+						preserve_center,chroma_placement,true,f,env);
 					result=env->Invoke(turnRightFunction,result).AsClip();
 				}
 			}
@@ -2594,14 +2821,18 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 							vu = env->Invoke(turnRightFunction,vu).AsClip();
 							vv = env->Invoke(turnRightFunction,vv).AsClip();
 							if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
-							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+							v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
 
 							VideoInfo vR = v.AsClip()->GetVideoInfo();
 							int ChromaS=vR.height >> shift;
 
-							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-							if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+							vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
+							vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
+							if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
 							v = env->Invoke(turnLeftFunction,v).AsClip();
 							vu = env->Invoke(turnLeftFunction,vu).AsClip();
 							vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2615,14 +2846,16 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						else
 						{
 							result=env->Invoke(turnRightFunction,clip).AsClip();
-							result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+							result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+								preserve_center,chroma_placement,true,f,env);
 							result=env->Invoke(turnLeftFunction,result).AsClip();
 						}
 					}
 					else
 					{
 						result=env->Invoke(turnLeftFunction,clip).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 						result=env->Invoke(turnRightFunction,result).AsClip();
 					}
 				}
@@ -2664,14 +2897,18 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						vu = env->Invoke(turnRightFunction,vu).AsClip();
 						vv = env->Invoke(turnRightFunction,vv).AsClip();
 						if (isAlphaChannel) va = env->Invoke(turnRightFunction,va).AsClip();
-						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+						v = CreateResizeV(v.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[0],desample,accuracy,0,shift,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 
 						VideoInfo vR = v.AsClip()->GetVideoInfo();
 						int ChromaS=vR.height >> shift;
 
-						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp, f, env);
-						if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp, f, env);
+						vu = CreateResizeV(vu.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[1],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
+						vv = CreateResizeV(vv.AsClip(), subrange_left/div, subrange_width/div, target_width >> shift,threads_number,_sleep,(step2)?1:plane_range[2],desample,accuracy,ChromaS,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
+						if (isAlphaChannel) va = CreateResizeV(va.AsClip(), subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:plane_range[3],desample,accuracy,0,shift,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 						v = env->Invoke(turnLeftFunction,v).AsClip();
 						vu = env->Invoke(turnLeftFunction,vu).AsClip();
 						vv = env->Invoke(turnLeftFunction,vv).AsClip();
@@ -2685,14 +2922,16 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 					else
 					{
 						result=env->Invoke(turnRightFunction,clip).AsClip();
-						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+						result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+							preserve_center,chroma_placement,true,f,env);
 						result=env->Invoke(turnLeftFunction,result).AsClip();
 					}
 				}
 				else
 				{
 					result=env->Invoke(turnLeftFunction,clip).AsClip();
-					result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+					result=CreateResizeV(result, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+						preserve_center,chroma_placement,true,f,env);
 					result=env->Invoke(turnRightFunction,result).AsClip();
 				}
 			}
@@ -2711,9 +2950,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
-				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+					preserve_center,chroma_placement,false,f,env);
 			}
-			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+				preserve_center,chroma_placement,false,f,env);
 		}
 	  }
   }
@@ -2737,9 +2978,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
-				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch, avsp, f, env);
+				else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+					preserve_center,chroma_placement,false,f,env);
 			}
-			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+			else result = CreateResizeV(clip, subrange_top, subrange_height, target_height,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+				preserve_center,chroma_placement,false,f,env);
 		}
 		if (!((subrange_left==0) && (subrange_width==target_width) && (subrange_width==vi.width) && !force_H))
 		{
@@ -2755,9 +2998,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
-				else result = CreateResizeH(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,negativePrefetch,avsp, f, env);
+				else result = CreateResizeH(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,negativePrefetch,avsp,
+					preserve_center,chroma_placement,f,env);
 			}
-			else result = CreateResizeH(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,negativePrefetch,avsp, f, env);
+			else result = CreateResizeH(result, subrange_left, subrange_width, target_width,threads_number,_sleep,range_mode,desample,accuracy,negativePrefetch,avsp,
+				preserve_center,chroma_placement,f,env);
 		}		
 	  }
 	  else
@@ -2778,9 +3023,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
-				else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,negativePrefetch,avsp, f, env);
+				else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,negativePrefetch,avsp,
+					preserve_center,chroma_placement,f,env);
 			}
-			else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,negativePrefetch,avsp, f, env);
+			else result = CreateResizeH(clip, subrange_left, subrange_width, target_width,threads_number,_sleep,(step2)?1:range_mode,desample,accuracy,negativePrefetch,avsp,
+				preserve_center,chroma_placement,f,env);
 		}
 		if (!((subrange_top==0) && (subrange_height==target_height) && (subrange_height==vi.height) && !force_V))
 		{
@@ -2796,9 +3043,11 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 						result=env->Invoke("Crop",AVSValue(sargs,6)).AsClip();
 					}
 				}
-				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+				else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+					preserve_center,chroma_placement,false,f,env);
 			}
-			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp, f, env);
+			else result = CreateResizeV(result, subrange_top, subrange_height, target_height,threads_number,_sleep,range_mode,desample,accuracy,0,0,negativePrefetch,avsp,
+				preserve_center,chroma_placement,false,f,env);
 		}
 	  }
   }
@@ -2810,114 +3059,239 @@ PClip FilteredResizeMT::CreateResize(PClip clip, int target_width, int target_he
 AVSValue __cdecl FilteredResizeMT::Create_PointResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   PointFilter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_BilinearResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   TriangleFilter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_BicubicResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   MitchellNetravaliFilter f(args[3].AsDblDef(1./3.), args[4].AsDblDef(1./3.));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[9].AsInt(0),args[10].AsInt(0),
-	  args[11].AsBool(true),args[12].AsBool(true),args[13].AsBool(false),args[14].AsBool(false),
-	  args[15].AsInt(0),args[16].AsInt(1),false,0,0,args[17].AsInt(6),&args[5],&f,env);
+  const int force = args[9].AsInt(0);
+
+  bool preserve_center = args[10].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[11].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 12;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_LanczosResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   LanczosFilter f(args[7].AsInt(3));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),false,0,0,args[16].AsInt(6),&args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Lanczos4Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   LanczosFilter f(4);
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_BlackmanResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   BlackmanFilter f(args[7].AsInt(4));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),false,0,0,args[16].AsInt(6),&args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline16Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline16Filter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline36Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline36Filter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_Spline64Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline64Filter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),false,0,0,args[15].AsInt(6),&args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_GaussianResize(AVSValue args, void*, IScriptEnvironment* env)
 {
-	GaussianFilter f(args[7].AsFloat(30.0f),args[8].AsFloat(2.0f),args[9].AsFloat(4.0f));
-	return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[10].AsInt(0),args[11].AsInt(0),
-		args[12].AsBool(true),args[13].AsBool(true),args[14].AsBool(false),args[15].AsBool(false),
-		args[16].AsInt(0),args[17].AsInt(1),false,0,0,args[18].AsInt(6),&args[3],&f,env);
+  GaussianFilter f(args[7].AsFloat(30.0f),args[8].AsFloat(2.0f),args[9].AsFloat(4.0f));
+  const int force = args[10].AsInt(0);
+
+  bool preserve_center = args[11].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[12].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 13;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_SincResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   SincFilter f(args[7].AsInt(4));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),false,0,0,args[16].AsInt(6),&args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_SinPowerResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   SinPowerFilter f(args[7].AsFloat(2.5f));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),false,0,0,args[16].AsInt(6),&args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_SincLin2Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   SincLin2Filter f(args[7].AsInt(15));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),false,0,0,args[16].AsInt(6),&args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_UserDefined2Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
-	UserDefined2Filter f(args[3].AsFloat(121.0f),args[4].AsFloat(19.0f), args[5].AsFloat(2.3f));
-	return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[10].AsInt(0),args[11].AsInt(0),
-			args[12].AsBool(true),args[13].AsBool(true),args[14].AsBool(false),args[15].AsBool(false),
-			args[16].AsInt(0),args[17].AsInt(1),false,0,0,args[18].AsInt(6),&args[6],&f,env);
+  UserDefined2Filter f(args[3].AsFloat(121.0f),args[4].AsFloat(19.0f), args[5].AsFloat(2.3f));
+  const int force = args[10].AsInt(0);
 
+  bool preserve_center = args[11].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[12].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 13;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 // Desample functions
@@ -2925,118 +3299,222 @@ AVSValue __cdecl FilteredResizeMT::Create_UserDefined2Resize(AVSValue args, void
 AVSValue __cdecl FilteredResizeMT::Create_DeBilinearResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   TriangleFilter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),true,args[15].AsInt(0),args[16].AsInt(0),args[17].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeBicubicResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   MitchellNetravaliFilter f(args[3].AsDblDef(1./3.), args[4].AsDblDef(1./3.));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[9].AsInt(0),args[10].AsInt(0),
-	  args[11].AsBool(true),args[12].AsBool(true),args[13].AsBool(false),args[14].AsBool(false),
-	  args[15].AsInt(0),args[16].AsInt(1),true,args[17].AsInt(0),args[18].AsInt(0),args[19].AsInt(6),
-	  &args[5],&f,env);
+  const int force = args[9].AsInt(0);
+
+  bool preserve_center = args[10].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[11].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 12;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeLanczosResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   LanczosFilter f(args[7].AsInt(3));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),true,args[16].AsInt(0),args[17].AsInt(0),args[18].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeLanczos4Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   LanczosFilter f(4);
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),true,args[15].AsInt(0),args[16].AsInt(0),args[17].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeBlackmanResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   BlackmanFilter f(args[7].AsInt(4));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),true,args[16].AsInt(0),args[17].AsInt(0),args[18].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeSpline16Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline16Filter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),true,args[15].AsInt(0),args[16].AsInt(0),args[17].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeSpline36Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline36Filter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),true,args[15].AsInt(0),args[16].AsInt(0),args[17].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeSpline64Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   Spline64Filter f;
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[7].AsInt(0),args[8].AsInt(0),
-	  args[9].AsBool(true),args[10].AsBool(true),args[11].AsBool(false),args[12].AsBool(false),
-	  args[13].AsInt(0),args[14].AsInt(1),true,args[15].AsInt(0),args[16].AsInt(0),args[17].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[7].AsInt(0);
+
+  bool preserve_center = args[8].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[9].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 10;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeGaussianResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   GaussianFilter f(args[7].AsFloat(30.0f),args[8].AsFloat(2.0f),args[9].AsFloat(4.0f));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[10].AsInt(0),args[11].AsInt(0),
-	  args[12].AsBool(true),args[13].AsBool(true),args[14].AsBool(false),args[15].AsBool(false),
-	  args[16].AsInt(0),args[17].AsInt(1),true,args[18].AsInt(0),args[19].AsInt(0),args[20].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[10].AsInt(0);
+
+  bool preserve_center = args[11].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[12].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 13;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeSincResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   SincFilter f(args[7].AsInt(4));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),true,args[16].AsInt(0),args[17].AsInt(0),args[18].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeSinPowerResize(AVSValue args, void*, IScriptEnvironment* env)
 {
   SinPowerFilter f(args[7].AsFloat(2.5f));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),true,args[16].AsInt(0),args[17].AsInt(0),args[18].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeSincLin2Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   SincLin2Filter f(args[7].AsInt(15));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[8].AsInt(0),args[9].AsInt(0),
-	  args[10].AsBool(true),args[11].AsBool(true),args[12].AsBool(false),args[13].AsBool(false),
-	  args[14].AsInt(0),args[15].AsInt(1),true,args[16].AsInt(0),args[17].AsInt(0),args[18].AsInt(6),
-	  &args[3],&f,env);
+  const int force = args[8].AsInt(0);
+
+  bool preserve_center = args[9].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[10].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 11;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 AVSValue __cdecl FilteredResizeMT::Create_DeUserDefined2Resize(AVSValue args, void*, IScriptEnvironment* env)
 {
   UserDefined2Filter f(args[3].AsFloat(121.0f),args[4].AsFloat(19.0f),args[5].AsFloat(2.3f));
-  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),args[10].AsInt(0),args[11].AsInt(0),
-		  args[12].AsBool(true),args[13].AsBool(true),args[14].AsBool(false),args[15].AsBool(false),
-		  args[16].AsInt(0),args[17].AsInt(1),true,args[18].AsInt(0),args[19].AsInt(0),args[20].AsInt(6),
-		  &args[6],&f,env);
+  const int force = args[10].AsInt(0);
+
+  bool preserve_center = args[11].AsBool(true); // [keep_center] default Avisynth
+  const char* placement_name = args[12].AsString("auto"); // [placement]s
+  const ChromaLocation_e forced_chroma_placement = AVS_CHROMA_UNUSED; // no force, used internally
+
+  const unsigned short Offset_Arg = 13;
+
+  return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
+	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
 
@@ -3052,63 +3530,63 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 
 	SetCPUMatrixClass((env->GetCPUFlags() & CPUF_SSE2)!=0,(env->GetCPUFlags() & CPUF_AVX)!=0,(env->GetCPUFlags() & CPUF_AVX2)!=0);
 
-	env->AddFunction("PointResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_PointResize, 0);
-	env->AddFunction("BilinearResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_BilinearResize, 0);
-	env->AddFunction("BicubicResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_BicubicResize, 0);
-	env->AddFunction("LanczosResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_LanczosResize, 0);
-	env->AddFunction("Lanczos4ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Lanczos4Resize, 0);
-	env->AddFunction("BlackmanResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_BlackmanResize, 0);
-	env->AddFunction("Spline16ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline16Resize, 0);
-	env->AddFunction("Spline36ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline36Resize, 0);
-	env->AddFunction("Spline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline64Resize, 0);
-	env->AddFunction("GaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[b]f[s]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_GaussianResize, 0);
-	env->AddFunction("SincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_SincResize, 0);
-	env->AddFunction("SinPowResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_SinPowerResize, 0);
-	env->AddFunction("SincLin2ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_SincLin2Resize, 0);
-	env->AddFunction("UserDefined2ResizeMT", "c[target_width]i[target_height]i[b]f[c]f[s]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i", FilteredResizeMT::Create_UserDefined2Resize, 0);
+	env->AddFunction("PointResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_PointResize, 0);
+	env->AddFunction("BilinearResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_BilinearResize, 0);
+	env->AddFunction("BicubicResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_BicubicResize, 0);
+	env->AddFunction("LanczosResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_LanczosResize, 0);
+	env->AddFunction("Lanczos4ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Lanczos4Resize, 0);
+	env->AddFunction("BlackmanResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_BlackmanResize, 0);
+	env->AddFunction("Spline16ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline16Resize, 0);
+	env->AddFunction("Spline36ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline36Resize, 0);
+	env->AddFunction("Spline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_Spline64Resize, 0);
+	env->AddFunction("GaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[b]f[s]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_GaussianResize, 0);
+	env->AddFunction("SincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_SincResize, 0);
+	env->AddFunction("SinPowResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_SinPowerResize, 0);
+	env->AddFunction("SincLin2ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i",FilteredResizeMT::Create_SincLin2Resize, 0);
+	env->AddFunction("UserDefined2ResizeMT", "c[target_width]i[target_height]i[b]f[c]f[s]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[ThreadLevel]i", FilteredResizeMT::Create_UserDefined2Resize, 0);
 
 // Desample functions
 
-	env->AddFunction("DeBilinearResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeBilinearResize, 0);
-	env->AddFunction("DeBicubicResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeBicubicResize, 0);
-	env->AddFunction("DeLanczosResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeLanczosResize, 0);
-	env->AddFunction("DeLanczos4ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeLanczos4Resize, 0);
-	env->AddFunction("DeBlackmanResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeBlackmanResize, 0);
-	env->AddFunction("DeSpline16ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSpline16Resize, 0);
-	env->AddFunction("DeSpline36ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSpline36Resize, 0);
-	env->AddFunction("DeSpline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSpline64Resize, 0);
-	env->AddFunction("DeGaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[b]f[s]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeGaussianResize, 0);
-	env->AddFunction("DeSincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSincResize, 0);
-	env->AddFunction("DeSinPowResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSinPowerResize, 0);
-	env->AddFunction("DeSincLin2ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSincLin2Resize, 0);
-	env->AddFunction("DeUserDefined2ResizeMT", "c[target_width]i[target_height]i[b]f[c]f[s]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[threads]i" \
-		"[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeUserDefined2Resize, 0);
+	env->AddFunction("DeBilinearResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeBilinearResize, 0);
+	env->AddFunction("DeBicubicResizeMT", "c[target_width]i[target_height]i[b]f[c]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeBicubicResize, 0);
+	env->AddFunction("DeLanczosResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeLanczosResize, 0);
+	env->AddFunction("DeLanczos4ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeLanczos4Resize, 0);
+	env->AddFunction("DeBlackmanResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeBlackmanResize, 0);
+	env->AddFunction("DeSpline16ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSpline16Resize, 0);
+	env->AddFunction("DeSpline36ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSpline36Resize, 0);
+	env->AddFunction("DeSpline64ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSpline64Resize, 0);
+	env->AddFunction("DeGaussResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[b]f[s]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeGaussianResize, 0);
+	env->AddFunction("DeSincResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSincResize, 0);
+	env->AddFunction("DeSinPowResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[p]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSinPowerResize, 0);
+	env->AddFunction("DeSincLin2ResizeMT", "c[target_width]i[target_height]i[src_left]f[src_top]f[src_width]f[src_height]f[taps]i[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeSincLin2Resize, 0);
+	env->AddFunction("DeUserDefined2ResizeMT", "c[target_width]i[target_height]i[b]f[c]f[s]f[src_left]f[src_top]f[src_width]f[src_height]f[force]i[keep_center]b[placement]s" \
+		"[threads]i[logicalCores]b[MaxPhysCore]b[SetAffinity]b[sleep]b[prefetch]i[range]i[accuracy]i[order]i[ThreadLevel]i",FilteredResizeMT::Create_DeUserDefined2Resize, 0);
 
 	return "ResizeMT plugin";	
 }

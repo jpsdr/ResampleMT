@@ -38,6 +38,7 @@
 #include <malloc.h>
 #include <math.h>
 #include <vector>
+#include <string.h>
 
 #include "./avisynth.h"
 #include "./MatrixClass.h"
