@@ -882,6 +882,7 @@ __attribute__((__target__("ssse3")))
 #endif
 void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  const int filter_size = program->filter_size;
   const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real, 8) >> 3);
 
   const float *src = reinterpret_cast<const float *>(src8);
@@ -911,7 +912,9 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
 
   for (int y = 0; y < height; y++)
   {
-    float* current_coeff = program->pixel_coefficient_float;
+    float *current_coeff,*current_coeff_y;
+
+	current_coeff_y = program->pixel_coefficient_float;
 
     // loop for clean, non-offscreen data
     for (int x = 0; x < unsafe_limit; x += pixels_per_cycle)
@@ -927,21 +930,35 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
       int begin3 = program->pixel_offset[x + 2];
       int begin4 = program->pixel_offset[x + 3];
 
+	  current_coeff = current_coeff_y;
+
       // begin1, result1
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin1, i, current_coeff, result1);
+
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
 
       // begin2, result2
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin2, i, current_coeff, result2);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin3, result3
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin3, i, current_coeff, result3);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin4, result4
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin4, i, current_coeff, result4);
+
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
 
       // this part needs ssse3
       __m128 result12 = _mm_hadd_ps(result1, result2);
@@ -965,17 +982,28 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin1, i, current_coeff, result1);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin2, result2
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin2, i, current_coeff, result2);
 
-      // begin3, result3
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
+	  // begin3, result3
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin3, i, current_coeff, result3);
+
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
 
       // begin4, result4
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_float(src, begin4, i, current_coeff, result4);
+
+	  current_coeff_y+=filter_size;
 
       // this part needs ssse3
      result12 = _mm_hadd_ps(result1, result2);
@@ -999,13 +1027,19 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
       int begin3 = program->pixel_offset[x + 2];
       int begin4 = program->pixel_offset[x + 3];
 
+	  current_coeff = current_coeff_y;
+
       // begin1, result1
       for (int i = 0; i < filter_size_numOfBlk8 - 1; i++)
         process_one_pixel_h_float(src, begin1, i, current_coeff, result1);
+
       if (begin1 < program->source_overread_offset)
         process_one_pixel_h_float(src, begin1, filter_size_numOfBlk8 - 1, current_coeff, result1);
       else
         process_one_pixel_h_float_mask<filtersizemod8>(src, begin1, filter_size_numOfBlk8 - 1, current_coeff, result1, mask);
+
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
 
       // begin2, result2
       for (int i = 0; i < filter_size_numOfBlk8 - 1; i++)
@@ -1015,6 +1049,9 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
       else
         process_one_pixel_h_float_mask<filtersizemod8>(src, begin2, filter_size_numOfBlk8 - 1, current_coeff, result2, mask);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin3, result3
       for (int i = 0; i < filter_size_numOfBlk8 - 1; i++)
         process_one_pixel_h_float(src, begin3, i, current_coeff, result3);
@@ -1023,6 +1060,9 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
       else
         process_one_pixel_h_float_mask<filtersizemod8>(src, begin3, filter_size_numOfBlk8 - 1, current_coeff, result3, mask);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin4, result4
       for (int i = 0; i < filter_size_numOfBlk8 - 1; i++)
         process_one_pixel_h_float(src, begin4, i, current_coeff, result4);
@@ -1030,6 +1070,8 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
         process_one_pixel_h_float(src, begin4, filter_size_numOfBlk8 - 1, current_coeff, result4);
       else
         process_one_pixel_h_float_mask<filtersizemod8>(src, begin4, filter_size_numOfBlk8 - 1, current_coeff, result4, mask);
+
+	  current_coeff_y+=filter_size;
 
       // this part needs ssse3
       __m128 result12 = _mm_hadd_ps(result1, result2);
@@ -1112,6 +1154,7 @@ __attribute__((__target__("ssse3")))
 #endif
 static void internal_resizer_h_ssse3_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  const int filter_size = program->filter_size;
   // 1 and 2: special case for compiler optimization
   const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real,8) >> 3);
 
@@ -1134,7 +1177,9 @@ static void internal_resizer_h_ssse3_generic_uint16_t(BYTE* dst8, const BYTE* sr
 
   for (int y = 0; y < height; y++)
   {
-    short* current_coeff = program->pixel_coefficient;
+    short *current_coeff,*current_coeff_y;
+
+	current_coeff_y = program->pixel_coefficient;
 
     for (int x = 0; x < width; x += 4)
 	{
@@ -1148,22 +1193,35 @@ static void internal_resizer_h_ssse3_generic_uint16_t(BYTE* dst8, const BYTE* sr
       int begin3 = program->pixel_offset[x + 2];
       int begin4 = program->pixel_offset[x + 3];
 
+	  current_coeff = current_coeff_y;
+
       // this part is repeated 4 times
       // begin1, result1
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin1, i, current_coeff, result1, shifttosigned);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin2, result2
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin2, i, current_coeff, result2, shifttosigned);
+
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
 
       // begin3, result3
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin3, i, current_coeff, result3, shifttosigned);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin4, result4
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin4, i, current_coeff, result4, shifttosigned);
+
+	  current_coeff_y+=filter_size;
 
       const __m128i sumQuad12 = _mm_hadd_epi32(result1, result2); // L1L1L1L1 + L2L2L2L2 = L1L1 L2L2
       const __m128i sumQuad34 = _mm_hadd_epi32(result3, result4); // L3L3L3L3 + L4L4L4L4 = L3L3 L4L4
@@ -1198,6 +1256,7 @@ __attribute__((__target__("sse4.1")))
 #endif
 static void internal_resizer_h_sse41_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  const int filter_size = program->filter_size;
   // 1 and 2: special case for compiler optimization
   const int filter_size_numOfBlk8 = (filtersizealigned8 >= 1) ? filtersizealigned8 : (AlignNumber(program->filter_size_real,8) >> 3);
 
@@ -1220,7 +1279,9 @@ static void internal_resizer_h_sse41_generic_uint16_t(BYTE* dst8, const BYTE* sr
 
   for (int y = 0; y < height; y++)
   {
-    short* current_coeff = program->pixel_coefficient;
+    short *current_coeff,*current_coeff_y;
+
+	current_coeff_y = program->pixel_coefficient;
 
     for (int x = 0; x < width; x += 4)
 	{
@@ -1234,22 +1295,35 @@ static void internal_resizer_h_sse41_generic_uint16_t(BYTE* dst8, const BYTE* sr
       int begin3 = program->pixel_offset[x + 2];
       int begin4 = program->pixel_offset[x + 3];
 
+	  current_coeff = current_coeff_y;
+
       // this part is repeated 4 times
       // begin1, result1
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin1, i, current_coeff, result1, shifttosigned);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin2, result2
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin2, i, current_coeff, result2, shifttosigned);
+
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
 
       // begin3, result3
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin3, i, current_coeff, result3, shifttosigned);
 
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
       // begin4, result4
       for (int i = 0; i < filter_size_numOfBlk8; i++)
         process_one_pixel_h_uint16_t<lessthan16bit>(src, begin4, i, current_coeff, result4, shifttosigned);
+
+	  current_coeff_y+=filter_size;
 
       const __m128i sumQuad12 = _mm_hadd_epi32(result1, result2); // L1L1L1L1 + L2L2L2L2 = L1L1 L2L2
       const __m128i sumQuad34 = _mm_hadd_epi32(result3, result4); // L3L3L3L3 + L4L4L4L4 = L3L3 L4L4
@@ -1345,8 +1419,10 @@ __forceinline static void process_chunk_v_uint16_t(const uint16_t *src2_ptr, int
 template<bool lessthan16bit, int _filter_size_numOfFullBlk8, int filtersizemod8>
 void internal_resize_v_sse2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size_real >> 3);
-  const short *current_coeff = program->pixel_coefficient + program->filter_size*MinY;
+  const int filter_size = program->filter_size;
+  const int filter_size_real = program->filter_size_real;
+  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (filter_size_real >> 3);
+  const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
   const int filter_size_numOfFullBlk8_8 = filter_size_numOfFullBlk8 << 3;
 
 #define NON32_BYTES_ALIGNMENT
@@ -1453,7 +1529,7 @@ void internal_resize_v_sse2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int ds
 	{
       int64_t result64 = Offset; // rounder
       const uint16_t* src2_ptr = src_ptr + x;
-      for (int i = 0; i < program->filter_size_real; i++)
+      for (int i = 0; i < filter_size_real; i++)
 	  {
         //result64 += (src_ptr + pitch_table[i] / sizeof(uint16_t))[x] * (int64_t)current_coeff[i];
         result64 += (int)(*src2_ptr) * (int64_t)current_coeff[i];
@@ -1466,7 +1542,7 @@ void internal_resize_v_sse2_planar_uint16_t(BYTE* dst0, const BYTE* src0, int ds
 #endif
 
     dst += dst_pitch;
-    current_coeff += program->filter_size;
+    current_coeff += filter_size;
   }
 
 #undef NON32_BYTES_ALIGNMENT
@@ -1479,8 +1555,10 @@ __attribute__((__target__("sse4.1")))
 #endif
 void internal_resize_v_sse41_planar_uint16_t(BYTE* dst0, const BYTE* src0, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (program->filter_size_real >> 3);
-  const short *current_coeff = program->pixel_coefficient + program->filter_size*MinY;
+  const int filter_size = program->filter_size;
+  const int filter_size_real = program->filter_size_real;
+  const int filter_size_numOfFullBlk8 = (_filter_size_numOfFullBlk8 >= 0) ? _filter_size_numOfFullBlk8 : (filter_size_real >> 3);
+  const short *current_coeff = program->pixel_coefficient + filter_size*MinY;
   const int filter_size_numOfFullBlk8_8 = filter_size_numOfFullBlk8 << 3;
 
 #define NON32_BYTES_ALIGNMENT
@@ -1587,7 +1665,7 @@ void internal_resize_v_sse41_planar_uint16_t(BYTE* dst0, const BYTE* src0, int d
 	{
       int64_t result64 = Offset; // rounder
       const uint16_t* src2_ptr = src_ptr + x;
-      for (int i = 0; i < program->filter_size_real; i++)
+      for (int i = 0; i < filter_size_real; i++)
 	  {
         //result64 += (src_ptr + pitch_table[i] / sizeof(uint16_t))[x] * (int64_t)current_coeff[i];
         result64 += (int)(*src2_ptr) * (int64_t)current_coeff[i];
@@ -1600,7 +1678,7 @@ void internal_resize_v_sse41_planar_uint16_t(BYTE* dst0, const BYTE* src0, int d
 #endif
 
     dst += dst_pitch;
-    current_coeff += program->filter_size;
+    current_coeff += filter_size;
   }
 
 #undef NON32_BYTES_ALIGNMENT
@@ -1938,7 +2016,8 @@ __attribute__((__target__("ssse3")))
 #endif
 void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const int filter_size = AlignNumber(program->filter_size_real,8) >> 3;
+  const int filter_size = program->filter_size;
+  const int filter_size_8 = AlignNumber(program->filter_size_real,8) >> 3;
   const __m128i zero = _mm_setzero_si128();
 
 	const int val_min = (range==1) ? 0 : 16;
@@ -1950,7 +2029,9 @@ void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_
 
   for (int y = 0; y < height; y++)
   {
-    const short *current_coeff = program->pixel_coefficient;
+    const short *current_coeff_y,*current_coeff;
+
+	current_coeff_y = program->pixel_coefficient;
 	
     for (int x = 0; x < width; x+=4)
 	{
@@ -1964,7 +2045,9 @@ void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_
       const int begin3 = program->pixel_offset[x+2];
       const int begin4 = program->pixel_offset[x+3];
 
-	  for (int i = 0; i < filter_size; i++)
+	  current_coeff = current_coeff_y;
+
+	  for (int i = 0; i < filter_size_8; i++)
 	  {
 	    __m128i data, coeff, current_result;
 		data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin1+(i << 3))); // 8 * 8 bit pixels
@@ -1976,7 +2059,10 @@ void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_
 	    current_coeff += 8;		
 	  }
 
-      for (int i = 0; i < filter_size; i++)
+	  current_coeff_y+=filter_size;
+	  current_coeff = current_coeff_y;
+
+      for (int i = 0; i < filter_size_8; i++)
 	  {
 		__m128i data, coeff, current_result;
         data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin2+(i << 3)));
@@ -1988,7 +2074,10 @@ void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_
 		current_coeff += 8;
       }
 
-      for (int i = 0; i < filter_size; i++)
+	  current_coeff_y+=filter_size;
+      current_coeff = current_coeff_y;
+
+	  for (int i = 0; i < filter_size_8; i++)
 	  {
 		__m128i data, coeff, current_result;
         data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin3+(i << 3)));
@@ -2000,7 +2089,10 @@ void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_
 		current_coeff += 8;
 	  }
 
-      for (int i = 0; i < filter_size; i++)
+	  current_coeff_y+=filter_size;
+      current_coeff = current_coeff_y;
+
+	  for (int i = 0; i < filter_size_8; i++)
 	  {
 		__m128i data, coeff, current_result;
         data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin4+(i << 3)));
@@ -2011,6 +2103,8 @@ void resizer_h_ssse3_generic(BYTE* dst, const BYTE* src, int dst_pitch, int src_
 
         current_coeff += 8;
 	  }
+
+	  current_coeff_y+=filter_size;
 
       __m128i result12 = _mm_hadd_epi32(result1, result2);
       __m128i result34 = _mm_hadd_epi32(result3, result4);
@@ -2038,7 +2132,9 @@ __attribute__((__target__("ssse3")))
 #endif
 void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
-  const __m128i zero = _mm_setzero_si128();
+	const int filter_size = program->filter_size;
+
+	const __m128i zero = _mm_setzero_si128();
 
 	const int val_min = (range==1) ? 0 : 16;
 	const int val_max = ((range==1) || (range==4)) ? 255 : (range==2) ? 235 : 240;
@@ -2050,7 +2146,7 @@ void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch,
   for (int y = 0; y < height; y++)
   {
     short *current_coeff = program->pixel_coefficient;
-	
+
     for (int x = 0; x < width; x+=4)
 	{
       __m128i result1 = _mm_setr_epi32(Offset, 0, 0, 0);
@@ -2072,7 +2168,7 @@ void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch,
       current_result = _mm_madd_epi16(data, coeff);
       result1 = _mm_add_epi32(result1, current_result);
 
-      current_coeff += 8;
+      current_coeff += filter_size;
 
       // Unroll 2
       data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin2));
@@ -2081,7 +2177,7 @@ void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch,
       current_result = _mm_madd_epi16(data, coeff);
       result2 = _mm_add_epi32(result2, current_result);
 
-      current_coeff += 8;
+      current_coeff += filter_size;
 
       // Unroll 3
       data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin3));
@@ -2090,7 +2186,7 @@ void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch,
       current_result = _mm_madd_epi16(data, coeff);
       result3 = _mm_add_epi32(result3, current_result);
 
-      current_coeff += 8;
+      current_coeff += filter_size;
 
       // Unroll 4
       data = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src+begin4));
@@ -2099,7 +2195,7 @@ void resizer_h_ssse3_8(BYTE* dst, const BYTE* src, int dst_pitch, int src_pitch,
       current_result = _mm_madd_epi16(data, coeff);
       result4 = _mm_add_epi32(result4, current_result);
 
-      current_coeff += 8;
+	  current_coeff += filter_size;
 
       // Combine
       __m128i result12 = _mm_hadd_epi32(result1, result2);
