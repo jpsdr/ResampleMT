@@ -321,34 +321,33 @@ static void resize_v_c_planar_u8(BYTE* dst8, const BYTE* src8, int dst_pitch, in
 
     for (int y = MinY; y < MaxY; y++)
     {
-      //const int kernel_size = program->kernel_sizes[y];
       const BYTE *src_ptr = src + pitch_table[program->pixel_offset[y]];
-
-      // perhaps helps vectorizing decision
-      //const int ksmod4 = (kernel_size >> 2) << 2;
 
       for (int x = 0; x < width; x++)
 	  {
         const BYTE* JPSDR_RESTRICT src2_ptr = src_ptr + x;
 		
-        int result = rounder;
+        int resultx4[4] = {rounder,0,0,0};
 		
         for (int i = 0; i < ksmod4; i += 4)
 	    {
-		  result +=((int)*(src2_ptr))*current_coeff[i];
-		  result +=((int)*(src2_ptr+src_pitch1))*current_coeff[i+1];
-		  result +=((int)*(src2_ptr+src_pitch2))*current_coeff[i+2];
-		  result +=((int)*(src2_ptr+src_pitch3))*current_coeff[i+3];
+		  resultx4[0] += ((short)*(src2_ptr))*current_coeff[i];
+		  resultx4[1] += ((short)*(src2_ptr+src_pitch1))*current_coeff[i+1];
+		  resultx4[2] += ((short)*(src2_ptr+src_pitch2))*current_coeff[i+2];
+		  resultx4[3] += ((short)*(src2_ptr+src_pitch3))*current_coeff[i+3];
 		  src2_ptr += src_pitch4;
         }
+		
+		int result_single = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+		
         for (int i = ksmod4; i < kernel_size; i++)
 	    {
-	      result +=((int)*(src2_ptr))*current_coeff[i];
+	      result_single += ((short)*(src2_ptr))*current_coeff[i];
 		  src2_ptr += src_pitch1;
         }
-        result = result >> FPScale8bits;
-		result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x3] : (result<16) ? 16 : result;
-		dst[x] = (BYTE) result;
+        result_single = result_single >> FPScale8bits;
+		result_single = (result_single>TabMax[x & 0x03]) ? TabMax[x & 0x3] : (result_single<16) ? 16 : result_single;
+		dst[x] = (BYTE) result_single;
       }
 
       dst += dst_pitch1;
@@ -359,34 +358,33 @@ static void resize_v_c_planar_u8(BYTE* dst8, const BYTE* src8, int dst_pitch, in
   {
     for (int y = MinY; y < MaxY; y++)
     {
-      //const int kernel_size = program->kernel_sizes[y];
       const BYTE *src_ptr = src + pitch_table[program->pixel_offset[y]];
-
-      // perhaps helps vectorizing decision
-      //const int ksmod4 = (kernel_size >> 2) << 2;
 
       for (int x = 0; x < width; x++)
 	  {
         const BYTE* JPSDR_RESTRICT src2_ptr = src_ptr + x;
 		
-        int result = rounder;
+        int resultx4[4] = {rounder,0,0,0};
 		
         for (int i = 0; i < ksmod4; i += 4)
 	    {
-		  result +=((int)*(src2_ptr))*current_coeff[i];
-		  result +=((int)*(src2_ptr+src_pitch1))*current_coeff[i+1];
-		  result +=((int)*(src2_ptr+src_pitch2))*current_coeff[i+2];
-		  result +=((int)*(src2_ptr+src_pitch3))*current_coeff[i+3];
+		  resultx4[0] += ((short)*(src2_ptr))*current_coeff[i];
+		  resultx4[1] += ((short)*(src2_ptr+src_pitch1))*current_coeff[i+1];
+		  resultx4[2] += ((short)*(src2_ptr+src_pitch2))*current_coeff[i+2];
+		  resultx4[3] += ((short)*(src2_ptr+src_pitch3))*current_coeff[i+3];
 		  src2_ptr += src_pitch4;
         }
+		
+		int result_single = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+		
         for (int i = ksmod4; i < kernel_size; i++)
 	    {
-	      result +=((int)*(src2_ptr))*current_coeff[i];
+	      result_single += ((short)*(src2_ptr))*current_coeff[i];
 		  src2_ptr += src_pitch1;
         }
-        result = result >> FPScale8bits;
-		result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
-		dst[x] = (BYTE) result;
+        result_single = result_single >> FPScale8bits;
+		result_single = (result_single>val_max) ? val_max : (result_single<val_min) ? val_min : result_single;
+		dst[x] = (BYTE) result_single;
       }
 
       dst += dst_pitch1;
@@ -429,11 +427,7 @@ static void resize_v_c_planar_u16(BYTE* dst8, const BYTE* src8, int dst_pitch, i
 
   for (int y = MinY; y < MaxY; y++)
   {
-    //const int kernel_size = program->kernel_sizes[y];
     const uint16_t *src_ptr = src + pitch_table[program->pixel_offset[y]];
-
-    // perhaps helps vectorizing decision
-    //const int ksmod4 = (kernel_size >> 2) << 2;
 
     for (int x = 0; x < width; x++)
 	{
@@ -441,45 +435,51 @@ static void resize_v_c_planar_u16(BYTE* dst8, const BYTE* src8, int dst_pitch, i
       // theoretically, no need for int64 accumulator,
       // sum of coeffs is 1.0 that is (1 << FPScale16bits) in integer arithmetic
       const uint16_t* JPSDR_RESTRICT src2_ptr = src_ptr + x;
-      int result = rounder;
+	  int result_single,resultx4[4] = {rounder,0,0,0};
 		
 	  if JPSDR_CONSTEXPR (!lessthan16bit)
 	  {
 		for (int i = 0; i < ksmod4; i+=4)
 		{
-		  result +=((int)*(src2_ptr) + shifttosigned_short)*current_coeff[i];
-		  result +=((int)*(src2_ptr+src_pitch1) + shifttosigned_short)*current_coeff[i+1];
-		  result +=((int)*(src2_ptr+src_pitch2) + shifttosigned_short)*current_coeff[i+2];
-		  result +=((int)*(src2_ptr+src_pitch3) + shifttosigned_short)*current_coeff[i+3];
+		  resultx4[0] += ((short)(*(src2_ptr) + shifttosigned_short))*current_coeff[i];
+		  resultx4[1] += ((short)(*(src2_ptr+src_pitch1) + shifttosigned_short))*current_coeff[i+1];
+		  resultx4[2] += ((short)(*(src2_ptr+src_pitch2) + shifttosigned_short))*current_coeff[i+2];
+		  resultx4[3] += ((short)(*(src2_ptr+src_pitch3) + shifttosigned_short))*current_coeff[i+3];
 		  src2_ptr += src_pitch4;
 		}
+		
+		result_single = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+		
 		for (int i = ksmod4; i < kernel_size; i++)
 		{
-		  result +=((int)*(src2_ptr) + shifttosigned_short)*current_coeff[i];
+		  result_single +=((short)(*(src2_ptr) + shifttosigned_short))*current_coeff[i];
 		  src2_ptr += src_pitch1;
 		}
-		result += shiftfromsigned_int;
+		result_single += shiftfromsigned_int;
 	  }
 	  else
 	  {
 		for (int i = 0; i < ksmod4; i+=4)
 		{
-		  result +=((int)*(src2_ptr))*current_coeff[i];
-		  result +=((int)*(src2_ptr+src_pitch1))*current_coeff[i+1];
-		  result +=((int)*(src2_ptr+src_pitch2))*current_coeff[i+2];
-		  result +=((int)*(src2_ptr+src_pitch3))*current_coeff[i+3];
+		  resultx4[0] += ((short)*(src2_ptr))*current_coeff[i];
+		  resultx4[1] += ((short)*(src2_ptr+src_pitch1))*current_coeff[i+1];
+		  resultx4[2] += ((short)*(src2_ptr+src_pitch2))*current_coeff[i+2];
+		  resultx4[3] += ((short)*(src2_ptr+src_pitch3))*current_coeff[i+3];
 		  src2_ptr += src_pitch4;
 		}
+		
+		result_single = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+		
 		for (int i = ksmod4; i < kernel_size; i++)
 		{
-		  result +=((int)*(src2_ptr))*current_coeff[i];
+		  result_single += ((short)*(src2_ptr))*current_coeff[i];
 		  src2_ptr += src_pitch1;
 		}
 	  }
 
-      result = result >> FPScale16bits;
-	  result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
-      dst[x] = (uint16_t)result;
+      result_single = result_single >> FPScale16bits;
+	  result_single = (result_single>val_max) ? val_max : (result_single<val_min) ? val_min : result_single;
+      dst[x] = (uint16_t)result_single;
     }
 
     dst += dst_pitch1;
@@ -509,31 +509,30 @@ static void resize_v_c_planar_f(BYTE* dst8, const BYTE* src8, int dst_pitch, int
 
   for (int y = MinY; y < MaxY; y++)
   {
-    //const int kernel_size = program->kernel_sizes[y];
     const float *src_ptr = src + pitch_table[program->pixel_offset[y]];
-
-    // perhaps helps vectorizing decision
-    //const int ksmod4 = (kernel_size >> 2) << 2;
 
     for (int x = 0; x < width; x++)
 	{
       const float* JPSDR_RESTRICT src2_ptr = src_ptr + x;
-      float result = 0;
+	  float resultx4[4]={0.0,0.0,0.0,0.0};
 		
       for (int i = 0; i < ksmod4; i += 4)
 	  {
-        result += (*(src2_ptr))*current_coeff[i];
-        result += (*(src2_ptr+src_pitch1))*current_coeff[i+1];
-        result += (*(src2_ptr+src_pitch2))*current_coeff[i+2];
-        result += (*(src2_ptr+src_pitch3))*current_coeff[i+3];
+        resultx4[0] += (*(src2_ptr))*current_coeff[i];
+        resultx4[1] += (*(src2_ptr+src_pitch1))*current_coeff[i+1];
+        resultx4[2] += (*(src2_ptr+src_pitch2))*current_coeff[i+2];
+        resultx4[3] += (*(src2_ptr+src_pitch3))*current_coeff[i+3];
         src2_ptr += src_pitch4;
       }
+	  
+	  float result_single = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+	  
       for (int i = ksmod4; i < kernel_size; i++)
 	  {
-        result += (*src2_ptr)*current_coeff[i];
+        result_single += (*src2_ptr)*current_coeff[i];
         src2_ptr += src_pitch1;
       }
-      dst[x] = result;
+      dst[x] = result_single;
     }
 
     dst += dst_pitch1;
@@ -593,32 +592,40 @@ static void resize_h_c_planar_u8(BYTE* dst8, const BYTE* src8, int dst_pitch, in
 			for (int x = 0; x < width; x++)
 			{
 				const BYTE* JPSDR_RESTRICT src2_ptr = src_ptr + program->pixel_offset[x];
-				int result = rounder;
+				int resultx8[8] = {rounder,0,0,0,0,0,0,0},resultx4[4] = {0,0,0,0};
 				
 				for (int i = 0; i < ksmod8; i += 8)
 				{
-					result += ((short)src2_ptr[i])*current_coeff[i];
-					result += ((short)src2_ptr[i+1])*current_coeff[i+1];
-					result += ((short)src2_ptr[i+2])*current_coeff[i+2];
-					result += ((short)src2_ptr[i+3])*current_coeff[i+3];
-					result += ((short)src2_ptr[i+4])*current_coeff[i+4];
-					result += ((short)src2_ptr[i+5])*current_coeff[i+5];
-					result += ((short)src2_ptr[i+6])*current_coeff[i+6];
-					result += ((short)src2_ptr[i+7])*current_coeff[i+7];
+					resultx8[0] += ((short)src2_ptr[i])*current_coeff[i];
+					resultx8[1] += ((short)src2_ptr[i+1])*current_coeff[i+1];
+					resultx8[2] += ((short)src2_ptr[i+2])*current_coeff[i+2];
+					resultx8[3] += ((short)src2_ptr[i+3])*current_coeff[i+3];
+					resultx8[4] += ((short)src2_ptr[i+4])*current_coeff[i+4];
+					resultx8[5] += ((short)src2_ptr[i+5])*current_coeff[i+5];
+					resultx8[6] += ((short)src2_ptr[i+6])*current_coeff[i+6];
+					resultx8[7] += ((short)src2_ptr[i+7])*current_coeff[i+7];
 				}
+				
+				int result_singlex8 = resultx8[0]+resultx8[1]+resultx8[2]+resultx8[3]+resultx8[4]
+					+resultx8[5]+resultx8[6]+resultx8[7];
+
 				for (int i = ksmod8; i < ksmod4; i += 4)
 				{
-					result += ((short)src2_ptr[i])*current_coeff[i];
-					result += ((short)src2_ptr[i+1])*current_coeff[i+1];
-					result += ((short)src2_ptr[i+2])*current_coeff[i+2];
-					result += ((short)src2_ptr[i+3])*current_coeff[i+3];
+					resultx4[0] += ((short)src2_ptr[i])*current_coeff[i];
+					resultx4[1] += ((short)src2_ptr[i+1])*current_coeff[i+1];
+					resultx4[2] += ((short)src2_ptr[i+2])*current_coeff[i+2];
+					resultx4[3] += ((short)src2_ptr[i+3])*current_coeff[i+3];
 				}
-				for (int i = ksmod4; i < kernel_size; i++)
-					result += ((short)src2_ptr[i])*current_coeff[i];
 				
-				result = result >> FPScale8bits;
-				result = (result>TabMax[x & 0x03]) ? TabMax[x & 0x3] : (result<16) ? 16 : result;
-				dst2_ptr[x] = (BYTE) result;
+				int result_singlex4 = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+				int result_single = result_singlex8 + result_singlex4;
+				
+				for (int i = ksmod4; i < kernel_size; i++)
+					result_single += ((short)src2_ptr[i])*current_coeff[i];
+				
+				result_single = result_single >> FPScale8bits;
+				result_single = (result_single>TabMax[x & 0x03]) ? TabMax[x & 0x3] : (result_single<16) ? 16 : result_single;
+				dst2_ptr[x] = (BYTE)result_single;
 				
 				current_coeff+=filter_size;
 			}
@@ -637,32 +644,40 @@ static void resize_h_c_planar_u8(BYTE* dst8, const BYTE* src8, int dst_pitch, in
 			for (int x = 0; x < width; x++)
 			{
 				const BYTE* JPSDR_RESTRICT src2_ptr = src_ptr + program->pixel_offset[x];
-				int result = rounder;
+				int resultx8[8] = {rounder,0,0,0,0,0,0,0},resultx4[4] = {0,0,0,0};
 				
 				for (int i = 0; i < ksmod8; i += 8)
 				{
-					result += ((short)src2_ptr[i])*current_coeff[i];
-					result += ((short)src2_ptr[i+1])*current_coeff[i+1];
-					result += ((short)src2_ptr[i+2])*current_coeff[i+2];
-					result += ((short)src2_ptr[i+3])*current_coeff[i+3];
-					result += ((short)src2_ptr[i+4])*current_coeff[i+4];
-					result += ((short)src2_ptr[i+5])*current_coeff[i+5];
-					result += ((short)src2_ptr[i+6])*current_coeff[i+6];
-					result += ((short)src2_ptr[i+7])*current_coeff[i+7];
+					resultx8[0] += ((short)src2_ptr[i])*current_coeff[i];
+					resultx8[1] += ((short)src2_ptr[i+1])*current_coeff[i+1];
+					resultx8[2] += ((short)src2_ptr[i+2])*current_coeff[i+2];
+					resultx8[3] += ((short)src2_ptr[i+3])*current_coeff[i+3];
+					resultx8[4] += ((short)src2_ptr[i+4])*current_coeff[i+4];
+					resultx8[5] += ((short)src2_ptr[i+5])*current_coeff[i+5];
+					resultx8[6] += ((short)src2_ptr[i+6])*current_coeff[i+6];
+					resultx8[7] += ((short)src2_ptr[i+7])*current_coeff[i+7];
 				}
+
+				int result_singlex8 = resultx8[0]+resultx8[1]+resultx8[2]+resultx8[3]+resultx8[4]
+					+resultx8[5]+resultx8[6]+resultx8[7];
+
 				for (int i = ksmod8; i < ksmod4; i += 4)
 				{
-					result += ((short)src2_ptr[i])*current_coeff[i];
-					result += ((short)src2_ptr[i+1])*current_coeff[i+1];
-					result += ((short)src2_ptr[i+2])*current_coeff[i+2];
-					result += ((short)src2_ptr[i+3])*current_coeff[i+3];
+					resultx4[0] += ((short)src2_ptr[i])*current_coeff[i];
+					resultx4[1] += ((short)src2_ptr[i+1])*current_coeff[i+1];
+					resultx4[2] += ((short)src2_ptr[i+2])*current_coeff[i+2];
+					resultx4[3] += ((short)src2_ptr[i+3])*current_coeff[i+3];
 				}
+
+				int result_singlex4 = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+				int result_single = result_singlex8 + result_singlex4;
+
 				for (int i = ksmod4; i < kernel_size; i++)
-					result += ((short)src2_ptr[i])*current_coeff[i];
+					result_single += ((short)src2_ptr[i])*current_coeff[i];
 				
-				result = result >> FPScale8bits;
-				result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
-				dst2_ptr[x] = (BYTE) result;
+				result_single = result_single >> FPScale8bits;
+				result_single = (result_single>val_max) ? val_max : (result_single<val_min) ? val_min : result_single;
+				dst2_ptr[x] = (BYTE)result_single;
 				
 				current_coeff+=filter_size;
 			}
@@ -710,39 +725,43 @@ static void resize_h_c_planar_u16(BYTE* dst8, const BYTE* src8, int dst_pitch, i
 
 			// theoretically, no need for int64 accumulator,
 			// sum of coeffs is 1.0 that is (1 << FPScale16bits) in integer arithmetic
-			int result=rounder;
+			int result_single,resultx4[4] = {rounder,0,0,0};
 			
 			if JPSDR_CONSTEXPR (!lessthan16bit)
 			{
 				for (int i = 0; i < ksmod4; i += 4)
 				{
-					result += ((int)src2_ptr[i]+shifttosigned_short)*current_coeff[i];
-					result += ((int)src2_ptr[i+1]+shifttosigned_short)*current_coeff[i+1];
-					result += ((int)src2_ptr[i+2]+shifttosigned_short)*current_coeff[i+2];
-					result += ((int)src2_ptr[i+3]+shifttosigned_short)*current_coeff[i+3];
+					resultx4[0] += ((short)(src2_ptr[i]+shifttosigned_short))*current_coeff[i];
+					resultx4[1] += ((short)(src2_ptr[i+1]+shifttosigned_short))*current_coeff[i+1];
+					resultx4[2] += ((short)(src2_ptr[i+2]+shifttosigned_short))*current_coeff[i+2];
+					resultx4[3] += ((short)(src2_ptr[i+3]+shifttosigned_short))*current_coeff[i+3];
 				}
-				
+
+				result_single = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+
 				for (int i = ksmod4; i < kernel_size; i++)
-					result += ((int)src2_ptr[i]+shifttosigned_short)*current_coeff[i];
-				result += shiftfromsigned_int;				
+					result_single += ((short)(src2_ptr[i]+shifttosigned_short))*current_coeff[i];
+				result_single += shiftfromsigned_int;				
 			}
 			else
 			{
 				for (int i = 0; i < ksmod4; i += 4)
 				{
-					result += ((int)src2_ptr[i])*current_coeff[i];
-					result += ((int)src2_ptr[i+1])*current_coeff[i+1];
-					result += ((int)src2_ptr[i+2])*current_coeff[i+2];
-					result += ((int)src2_ptr[i+3])*current_coeff[i+3];
+					resultx4[0] += ((short)src2_ptr[i])*current_coeff[i];
+					resultx4[1] += ((short)src2_ptr[i+1])*current_coeff[i+1];
+					resultx4[2] += ((short)src2_ptr[i+2])*current_coeff[i+2];
+					resultx4[3] += ((short)src2_ptr[i+3])*current_coeff[i+3];
 				}
-				
+
+				result_single = resultx4[0]+resultx4[1]+resultx4[2]+resultx4[3];
+
 				for (int i = ksmod4; i < kernel_size; i++)
-					result += ((int)src2_ptr[i])*current_coeff[i];
+					result_single += ((short)src2_ptr[i])*current_coeff[i];
 			}				
 
-			result = result >> FPScale16bits;
-			result = (result>val_max) ? val_max : (result<val_min) ? val_min : result;
-			dst2_ptr[x] = (uint16_t)result;
+			result_single = result_single >> FPScale16bits;
+			result_single = (result_single>val_max) ? val_max : (result_single<val_min) ? val_min : result_single;
+			dst2_ptr[x] = (uint16_t)result_single;
 
 			current_coeff += filter_size;
 		}
