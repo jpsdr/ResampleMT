@@ -36,6 +36,9 @@
     <ClCompile Include="resample_sse.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
+    <ClCompile Include="ResampleMT_AVX512.cpp">
+      <Filter>Fichiers sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resample.h">
@@ -65,6 +68,9 @@
     <ClInclude Include="resample_sse.h">
       <Filter>Fichiers d%27en-tête</Filter>
     </ClInclude>
+    <ClInclude Include="ResampleMT_AVX512.h">
+      <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resample.rc">
@@ -82,6 +88,12 @@
       <Filter>Fichiers sources</Filter>
     </MASM>
     <MASM Include="MatrixClass_AVX512_x64.asm">
+      <Filter>Fichiers sources</Filter>
+    </MASM>
+    <MASM Include="ResampleMT_AVX512_x86.asm">
+      <Filter>Fichiers sources</Filter>
+    </MASM>
+    <MASM Include="ResampleMT_AVX512_x64.asm">
       <Filter>Fichiers sources</Filter>
     </MASM>
   </ItemGroup>
