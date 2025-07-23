@@ -302,5 +302,3 @@ static AVSValue __cdecl Create_DeUserDefined2Resize(AVSValue args, void*, IScrip
 
 
 #endif // __Resample_H__
-
-

@@ -32,6 +32,8 @@
 // which is not derived from or based on Avisynth, such as 3rd-party filters,
 // import and export plugins, or graphical user interfaces.
 
+#if _MSC_VER >= 1923
+
 #include "./ResampleMT_AVX512.h"
 
 extern "C" void Resize_V_AVX512_Planar_8bits_ASM(const void *src,void *dst,const void *coeff,uint32_t width32,ptrdiff_t src_pitch,
@@ -147,3 +149,5 @@ void Resize_V_AVX512_32bits(BYTE* dst8, const BYTE* src8, int dst_pitch, int src
 		current_coeff += filter_size;
 	}
 }
+
+#endif
