@@ -3301,7 +3301,7 @@ AVSValue __cdecl FilteredResizeMT::Create_BicubicResize(AVSValue args, void*, IS
 
   return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
 	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
-	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[5],&f,
 	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
@@ -3488,7 +3488,7 @@ AVSValue __cdecl FilteredResizeMT::Create_UserDefined2Resize(AVSValue args, void
 
   return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
 	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
-	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[3],&f,
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),false,0,0,args[Offset_Arg+7].AsInt(6),&args[6],&f,
 	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
@@ -3524,7 +3524,7 @@ AVSValue __cdecl FilteredResizeMT::Create_DeBicubicResize(AVSValue args, void*, 
 
   return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
 	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
-	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[5],&f,
 	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
@@ -3711,7 +3711,7 @@ AVSValue __cdecl FilteredResizeMT::Create_DeUserDefined2Resize(AVSValue args, vo
 
   return CreateResize(args[0].AsClip(),args[1].AsInt(),args[2].AsInt(),force,args[Offset_Arg].AsInt(0),
 	  args[Offset_Arg+1].AsBool(true),args[Offset_Arg+2].AsBool(true),args[Offset_Arg+3].AsBool(false),args[Offset_Arg+4].AsBool(false),
-	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[3],&f,
+	  args[Offset_Arg+5].AsInt(0),args[Offset_Arg+6].AsInt(1),true,args[Offset_Arg+7].AsInt(0),args[Offset_Arg+8].AsInt(0),args[Offset_Arg+9].AsInt(6),&args[6],&f,
 	  preserve_center,placement_name,forced_chroma_placement,env);
 }
 
