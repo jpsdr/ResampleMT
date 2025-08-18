@@ -42,6 +42,7 @@
 
 #include "./resample_sse.h"
 
+// VS 2015
 #if _MSC_VER >= 1900
   #define JPSDR_RESTRICT __restrict
   #define JPSDR_CONSTEXPR constexpr
