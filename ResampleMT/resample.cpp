@@ -1595,9 +1595,6 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 	const int shift_h = (!grey && vi.IsPlanar() && !isRGBPfamily) ? vi.GetPlaneHeightSubsampling(PLANAR_U) : 0;
 
 	const int work_width = vi.IsPlanar() ? vi.width : vi.BytesFromPixels(vi.width)/pixelsize;
-	
-	if (vi.height<32) threads_number=1;
-	else threads_number=threads;
 
   // Create resampling program and pitch table
   int SizeV;
@@ -1699,6 +1696,9 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
 
   resampler_luma_aligned   = GetResampler(true,resampling_program_luma,env);
   resampler_luma_unaligned = GetResampler(false,resampling_program_luma,env);
+
+  if (SizeV<32) threads_number=1;
+  else threads_number=threads;
 
   threads_number=CreateMTData(threads_number,work_width,vi.height,work_width,SizeV,shift_w,shift_h);
 
