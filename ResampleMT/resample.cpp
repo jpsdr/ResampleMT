@@ -52,6 +52,7 @@
 // VS 2017 v15.3
 #if _MSC_VER >= 1911
   #define JPSDR_CONSTEXPR constexpr
+  //#define AVX512_BUILD_POSSIBLE
 #else
   #define JPSDR_CONSTEXPR
 #endif
@@ -855,8 +856,14 @@ FilteredResizeH::FilteredResizeH( PClip _child, double subrange_left, double sub
   Enable_SSSE3 = (env->GetCPUFlags() & CPUF_SSSE3)!=0;
   Enable_SSE4_1 = (env->GetCPUFlags() & CPUF_SSE4_1)!=0;
   Enable_AVX2 = false;
+  Enable_AVX512_Base = false;
+  Enable_AVX512_Fast = false;
 #ifdef AVX2_BUILD_POSSIBLE
   Enable_AVX2 = avsp && ((env->GetCPUFlags() & CPUF_AVX2)!=0);
+#endif
+#ifdef AVX512_BUILD_POSSIBLE
+  Enable_AVX512_Base = avsp && ((env->GetCPUFlags() & CPUF_AVX512_BASE)!=0);
+  Enable_AVX512_Fast = avsp && ((env->GetCPUFlags() & CPUF_AVX512_FAST)!=0);
 #endif
 
   double center_pos_h_luma;
@@ -1430,27 +1437,37 @@ PVideoFrame __stdcall FilteredResizeH::GetFrame(int n, IScriptEnvironment* env)
 
 ResamplerH FilteredResizeH::GetResampler(bool aligned, ResamplingProgram* program, IScriptEnvironment* env)
 {
-	int simd_coeff_count_padding = 8;
+	int simd_coeff_count_padding = 8; // even for _ks16_float this is enough, it works differently inside
 
 	if (Enable_SSSE3)
 	{
 		// both 8 and 16 bit SSSE3 and AVX2 horizontal resizer benefits from 16 pixels/cycle
 		// float is also using 32 bytes, but as 32/sizeof(float) = 8, then don't need 16
 		if (pixelsize == 1 || pixelsize == 2) simd_coeff_count_padding = 16;
-   }
+	}
 
+	// Not only does it prepare and pad for SIMD/vector code, but it also corrects, reorders, and equalizes coefficients 
+	// at the right and bottom ends, since we may have variable kernel sizes due to boundary conditions.
 	resize_prepare_coeffs(program, env, simd_coeff_count_padding);
 
 	if (pixelsize==1)
 	{
 		if (Enable_SSSE3)
 		{
-#ifdef AVX2_BUILD_POSSIBLE				
-			if (Enable_AVX2) return resizer_h_avx2_generic_uint8_t;
-			else
-#endif			
+#ifdef AVX512_BUILD_POSSIBLE
+			if (Enable_AVX12_Base)
 			{
-				return resizer_h_ssse3_generic_uint8_16<uint8_t, true>;
+			}
+			else
+#endif
+			{
+#ifdef AVX2_BUILD_POSSIBLE
+				if (Enable_AVX2) return resizer_h_avx2_generic_uint8_t;
+				else
+#endif			
+				{
+					return resizer_h_ssse3_generic_uint8_16<uint8_t, true>;
+				}
 			}
 		}
 		else return resize_h_c_planar_u8;
@@ -1459,17 +1476,25 @@ ResamplerH FilteredResizeH::GetResampler(bool aligned, ResamplingProgram* progra
 	{ 
 		if (Enable_SSSE3)
 		{
-#ifdef AVX2_BUILD_POSSIBLE				
-			if (Enable_AVX2)
+#ifdef AVX512_BUILD_POSSIBLE
+			if (Enable_AVX12_Base)
 			{
-				if(bits_per_pixel<16) return resizer_h_avx2_generic_uint16_t<true>;
-				else return resizer_h_avx2_generic_uint16_t<false>;
 			}
 			else
 #endif
 			{
-				if (bits_per_pixel<16) return resizer_h_ssse3_generic_uint8_16<uint16_t, true>;
-				else return resizer_h_ssse3_generic_uint8_16<uint16_t, false>;
+#ifdef AVX2_BUILD_POSSIBLE				
+				if (Enable_AVX2)
+				{
+					if(bits_per_pixel<16) return resizer_h_avx2_generic_uint16_t<true>;
+					else return resizer_h_avx2_generic_uint16_t<false>;
+				}
+				else
+#endif
+				{
+					if (bits_per_pixel<16) return resizer_h_ssse3_generic_uint8_16<uint16_t, true>;
+					else return resizer_h_ssse3_generic_uint8_16<uint16_t, false>;
+				}
 			}
 		}
 		else
@@ -1482,11 +1507,49 @@ ResamplerH FilteredResizeH::GetResampler(bool aligned, ResamplingProgram* progra
 	{ //if (pixelsize == 4)
 		if (Enable_SSSE3)
 		{
-#ifdef AVX2_BUILD_POSSIBLE
-			if (Enable_AVX2) return resizer_h_avx2_generic_float;
+#ifdef AVX512_BUILD_POSSIBLE
+			if (Enable_AVX12_Base)
+			{
+			}
 			else
+#endif
+			{
+#ifdef AVX2_BUILD_POSSIBLE
+				if (Enable_AVX2) //return resizer_h_avx2_generic_float;
+				{
+					// up to 4 coeffs it can be highly optimized with transposes, gather/permutex choice
+					if (program->filter_size_real<=4)
+					{
+						//                                    iSamplesInTheGroup,permutex_index_diff_limit,kernel_size
+						if (program->resize_h_planar_gather_permutex_vstripe_check(8,8,4))
+						{
+							 switch (program->filter_size_real)
+							 {
+								 case 1 : return resize_h_planar_float_avx2_transpose_vstripe_ks4<1>; break;
+								 case 2 : return resize_h_planar_float_avx2_transpose_vstripe_ks4<2>; break;
+								 case 3 : return resize_h_planar_float_avx2_transpose_vstripe_ks4<3>; break;
+								 case 4 : return resize_h_planar_float_avx2_transpose_vstripe_ks4<0>; break;
+								 default : return resize_h_planar_float_avx2_permutex_vstripe_ks4; break;
+							 }
+						}
+						else return resize_h_planar_float_avx2_permutex_vstripe_ks4;
+					}
+					else return resizer_h_avx2_generic_float_pix16_sub4_ks_4_8_16; // new generic, like avx512 version
+				}
+				else
 #endif		
-			return resizer_h_ssse3_generic_float;  // SSSE3
+				{
+					switch (program->filter_size_real)
+					{
+						case 1 : return resize_h_planar_float_sse_transpose_vstripe_ks4<1>; break;
+						case 2 : return resize_h_planar_float_sse_transpose_vstripe_ks4<2>; break;
+						case 3 : return resize_h_planar_float_sse_transpose_vstripe_ks4<3>; break;
+						case 4 : return resize_h_planar_float_sse_transpose_vstripe_ks4<0>; break;
+						default : return resizer_h_ssse3_generic_float; break;
+					}
+				}
+				//return resizer_h_ssse3_generic_float;  // SSSE3
+			}
 		}
 		else return resize_h_c_planar_f;
 	}
@@ -1541,8 +1604,14 @@ FilteredResizeV::FilteredResizeV( PClip _child, double subrange_top, double subr
   Enable_SSSE3 = (env->GetCPUFlags() & CPUF_SSSE3)!=0;
   Enable_SSE4_1 = (env->GetCPUFlags() & CPUF_SSE4_1)!=0;
   Enable_AVX2 = false;
+  Enable_AVX512_Base = false;
+  Enable_AVX512_Fast = false;
 #ifdef AVX2_BUILD_POSSIBLE
   Enable_AVX2 = avsp && ((env->GetCPUFlags() & CPUF_AVX2)!=0);
+#endif
+#ifdef AVX512_BUILD_POSSIBLE
+  Enable_AVX512_Base = avsp && ((env->GetCPUFlags() & CPUF_AVX512_BASE)!=0);
+  Enable_AVX512_Fast = avsp && ((env->GetCPUFlags() & CPUF_AVX512_FAST)!=0);
 #endif
 
   double center_pos_v_luma;
@@ -2285,78 +2354,103 @@ PVideoFrame __stdcall FilteredResizeV::GetFrame(int n, IScriptEnvironment* env)
 
 ResamplerV FilteredResizeV::GetResampler(bool aligned, ResamplingProgram* program, IScriptEnvironment* env)
 {
-  resize_prepare_coeffs(program, env, 8); 
+	resize_prepare_coeffs(program, env, 8);
+	// for SIMD friendliness and more: consolidate the kernel_size vs filter_size at the end.
+	// See comments at FilteredResizeH::GetResampler
 
-  if (program->filter_size_real==1)
-  {
-    // Fast pointresize
-    switch (pixelsize) // AVS16
-    {
-      case 1: return resize_v_planar_pointresize<uint8_t>;
-      case 2: return resize_v_planar_pointresize<uint16_t>;
-      default: // case 4:
-        return resize_v_planar_pointresize<float>;
-    }
-  }
-  else
-  {
-    // Other resizers
-    if (pixelsize==1)
-    {
-      if (aligned && Enable_SSE2)
-	  {
-#ifdef AVX2_BUILD_POSSIBLE
-		  if (Enable_AVX2) return resize_v_avx2_planar_uint8_t;
-		  else
-#endif
-		  {
-			  return resize_v_sse2_planar;
-		  }
-      }
-#ifdef X86_32
-      else if (Enable_MMX)
-	  {
-        return resize_v_mmx_planar;
-      }
-#endif
-	  else return resize_v_c_planar_u8; // C version
-    } 
-    else if (pixelsize==2)
+	if (program->filter_size_real==1)
 	{
-      if (aligned && Enable_SSE2)
-	  {
+		// Fast pointresize
+		switch (pixelsize) // AVS16
+		{
+			case 1 : return resize_v_planar_pointresize<uint8_t>; break;
+			case 2 : return resize_v_planar_pointresize<uint16_t>; break;
+			default: return resize_v_planar_pointresize<float>; break;
+		}
+	}
+	else
+	{
+		// Other resizers
+		if (pixelsize==1)
+		{
+			if (aligned && Enable_SSE2)
+			{
+#ifdef AVX512_BUILD_POSSIBLE
+				if (Enable_AVX512_Base) return resize_v_avx512_planar_uint8_t_w_sr;
+				else
+#endif
+				{
+#ifdef AVX2_BUILD_POSSIBLE
+					if (Enable_AVX2) return resize_v_avx2_planar_uint8_t;
+					else
+#endif
+					{
+						return resize_v_sse2_planar;
+					}
+				}
+			}
+#ifdef X86_32
+			else if (Enable_MMX)
+			{
+				return resize_v_mmx_planar;
+			}
+#endif
+			else return resize_v_c_planar_u8; // C version
+		} 
+		else if (pixelsize==2)
+		{
+			if (aligned && Enable_SSE2)
+			{
+#ifdef AVX512_BUILD_POSSIBLE
+				if (Enable_AVX512_Base)
+				{
+					if (bits_per_pixel<16) return resize_v_avx512_planar_uint16_t_w_sr<true>;
+					else return resize_v_avx512_planar_uint16_t_w_sr<false>;
+				}
+				else
+#endif
+				{
 #ifdef AVX2_BUILD_POSSIBLE		
-		if (Enable_AVX2)
-		{
-			if (bits_per_pixel<16) return resize_v_avx2_planar_uint16_t<true>;
-			else return resize_v_avx2_planar_uint16_t<false>;
+					if (Enable_AVX2)
+					{
+						if (bits_per_pixel<16) return resize_v_avx2_planar_uint16_t<true>;
+						else return resize_v_avx2_planar_uint16_t<false>;
+					}
+					else
+#endif			
+					{
+						if (bits_per_pixel<16) return resize_v_sse2_planar_uint16_t<true>;
+						else return resize_v_sse2_planar_uint16_t<false>;
+					}
+				}
+			}
+			else
+			{
+				if (bits_per_pixel<16) return resize_v_c_planar_u16<true>; // C version
+				else return resize_v_c_planar_u16<false>;
+			}
 		}
 		else
-#endif			
-		{
-			if (bits_per_pixel<16) return resize_v_sse2_planar_uint16_t<true>;
-			else return resize_v_sse2_planar_uint16_t<false>;
-		}
-	  }
-	  else
-	  {
-		  if (bits_per_pixel<16) return resize_v_c_planar_u16<true>; // C version
-		  else return resize_v_c_planar_u16<false>;
-	  }
-    }
-    else
-	{ // if (pixelsize== 4) 
-      if (aligned && Enable_SSE2)
-	  {
+		{ // if (pixelsize== 4) 
+			if (aligned && Enable_SSE2)
+			{
+#ifdef AVX512_BUILD_POSSIBLE
+				if (Enable_AVX512_Base) return resize_v_avx512_planar_float_w_sr;
+				else
+#endif
+				{
 #ifdef AVX2_BUILD_POSSIBLE			
-		if (Enable_AVX2) return resize_v_avx2_planar_float;
-		else
+//					if (Enable_AVX2) return resize_v_avx2_planar_float;
+					if (Enable_AVX2) return resize_v_avx2_planar_float_w_sr;
+					// a memory-optimized version of resize_v_avx2_planar_float
+					else
 #endif			
-		return resize_v_sse2_planar_float;
-	  }
-	  else return resize_v_c_planar_f;
-    }
-  }
+					return resize_v_sse2_planar_float;
+				}
+			}
+			else return resize_v_c_planar_f;
+		}
+	}
 }
 
 
