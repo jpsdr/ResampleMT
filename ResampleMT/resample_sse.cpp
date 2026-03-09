@@ -1270,7 +1270,7 @@ void resize_h_planar_float_sse_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src
       __m128 data_2;
       __m128 data_3;
       __m128 data_4;
-      if JPSDR_CONSTEXPR (partial_load) {
+      if (partial_load) {
         // In the potentially unsafe zone (near the right edge of the image), we use a safe loading function
         // to prevent reading beyond the allocated source scanline. This handles cases where loading 4 floats
         // starting from 'src_ptr + beginX' might exceed the source buffer.
