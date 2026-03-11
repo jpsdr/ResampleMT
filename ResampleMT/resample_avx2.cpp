@@ -117,7 +117,7 @@
 // because multiple and add (madd) works in the signed 16 bit domain.
 
 template<typename pixel_t, bool lessthan16bit, int filtersizealigned16>
-#if defined(CLANG)
+#if defined(__clang__)
 __attribute__((__target__("avx2,fma")))
 #endif
 __forceinline static void process_two_16pixels_h_uint8_16_core(const pixel_t* __restrict src, int begin1, int begin2, int i, const short* __restrict current_coeff, int filter_size, __m256i& result1, __m256i& result2,
@@ -150,7 +150,7 @@ __forceinline static void process_two_16pixels_h_uint8_16_core(const pixel_t* __
 
 // filtersizealigned16: special: 1..4. Generic: -1
 template<bool safe_aligned_mode, typename pixel_t, bool lessthan16bit, int filtersizealigned16>
-#if defined(CLANG)
+#if defined(__clang__)
 __attribute__((__target__("avx2,fma")))
 #endif
 __forceinline static void process_two_pixels_h_uint8_16(const pixel_t* __restrict src_ptr, int begin1, int begin2, const short* __restrict current_coeff, int filter_size, __m256i& result1, __m256i& result2, int kernel_size,
@@ -301,7 +301,7 @@ __forceinline static void process_two_pixels_h_uint8_16(const pixel_t* __restric
 
 // filtersizealigned16: special: 1..4. Generic: -1
 template<bool is_safe, typename pixel_t, bool lessthan16bit, int filtersizealigned16>
-#if defined(CLANG)
+#if defined(__clang__)
 __attribute__((__target__("avx2,fma")))
 //__attribute__((__target__("fma")))
 #endif
@@ -310,8 +310,6 @@ __forceinline static void process_eight_pixels_h_uint8_16(const pixel_t* src, in
   pixel_t* dst,
   ResamplingProgram* program)
 {
-  assert(program->filter_size_alignment >= 16); // code assumes this
-
   filter_size = (filtersizealigned16 >= 1) ? filtersizealigned16 * 16 : filter_size;
   // knowing a quasi-constexpr filter_size from template for commonly used sizes
   // aligned_filter_size 16, 32, 48, 64, hugely helps compiler optimization
@@ -394,7 +392,7 @@ __forceinline static void process_eight_pixels_h_uint8_16(const pixel_t* src, in
 
 // filtersizealigned16: special: 1..4. Generic: -1
 template<typename pixel_t, bool lessthan16bit, int filtersizealigned16>
-#if defined(CLANG)
+#if defined(__clang__)
 __attribute__((__target__("avx2,fma")))
 #endif
 static void internal_resizer_h_avx2_generic_uint8_16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
@@ -498,8 +496,8 @@ void resizer_h_avx2_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch
 // AVX2 Horizontal float
 
 // 2x8 pixels of two consecutive offset entries.
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 __forceinline static void process_two_8pixels_h_float_core(const float* src, int begin1, int begin2, int i, float* current_coeff, int filter_size, __m256& result1, __m256& result2) {
   __m256 data_1 = _mm256_loadu_ps(src + begin1 + i);
@@ -511,8 +509,8 @@ __forceinline static void process_two_8pixels_h_float_core(const float* src, int
 }
 
 template<bool safe_aligned_mode>
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 __forceinline static void process_two_pixels_h_float(const float* src_ptr, int begin1, int begin2, float* current_coeff, int filter_size, __m256& result1, __m256& result2, int kernel_size) {
   int ksmod8;
@@ -586,8 +584,8 @@ __forceinline static void process_two_pixels_h_float(const float* src_ptr, int b
 }
 
 template<bool is_safe>
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 __forceinline static void process_eight_pixels_h_float(const float* src, int x, float* current_coeff_base, int filter_size,
   __m128& zero128, __m256& zero256,
@@ -647,8 +645,8 @@ __forceinline static void process_eight_pixels_h_float(const float* src, int x, 
 
 // filtersizealigned8: special: 1..4. Generic: -1
 template<int filtersizealigned8>
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 static void internal_resizer_h_avx2_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel) {
   const int filter_size = (filtersizealigned8 >= 1) ? filtersizealigned8 * 8 : program->filter_size;
@@ -686,31 +684,15 @@ static void internal_resizer_h_avx2_generic_float(BYTE* dst8, const BYTE* src8, 
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // Helper for horizontal resampling 32 bit float
 // Safe dual lane partial load with AVX
 // Read exactly N pixels, avoiding
 // - reading beyond the end of the source buffer.
 // - avoid NaN contamination, since event with zero coefficients NaN * 0 = NaN
-#if defined(CLANG)
-__attribute__((__target__("fma")))
-#endif
 template <int Nmod4>
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
+#endif
 __forceinline static __m256 _mm256_load_partial_safe_2_m128(const float* src_ptr_offsetted1, const float* src_ptr_offsetted2) {
   __m128 s1;
   __m128 s2;
@@ -750,10 +732,10 @@ __forceinline static __m256 _mm256_load_partial_safe_2_m128(const float* src_ptr
 
 // this is a generic varsion for small kernels up to 4 taps, regardless of up or down scaling
 // Note: there is a further optimized version of ks4 resampler, which combines gather or permutex.
-#if defined(CLANG)
-__attribute__((__target__("fma")))
-#endif
 template<int filtersizemod4>
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
+#endif
 void resize_h_planar_float_avx_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2) {
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
@@ -962,10 +944,10 @@ BilinearResize(int(width*0.97), height) # gather, H kernel size 3
 */
 
 // resize_h_planar_float_avx2_xxx_vstripe_ks4 method #1: gather-based
-#if defined(CLANG)
-__attribute__((__target__("fma")))
-#endif
 template<int filtersizemod4>
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
+#endif
 void resize_h_planar_float_avx2_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
@@ -1099,8 +1081,8 @@ void resize_h_planar_float_avx2_transpose_vstripe_ks4(BYTE* dst8, const BYTE* sr
 
 // Helper for permutex style horizontal resampling 32 bit float
 // Safe partial load for 1-7 floats, padding with zeros to avoid NaN contamination
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 static __m256 _mm256_load_partial_safe(const float* src_ptr, int floats_to_load) {
   if (floats_to_load == 1)
@@ -1125,8 +1107,8 @@ static __m256 _mm256_load_partial_safe(const float* src_ptr, int floats_to_load)
 
 
 // resize_h_planar_float_avx2_xxx_vstripe_ks4 method #2: permutex-based
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 void resize_h_planar_float_avx2_permutex_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
@@ -1280,8 +1262,8 @@ typedef struct {
   __m256 MH_B; // High output half mask (1s select B, 0s select A)
 } PermuteVectors_AVX2;
 
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 static void precalculate_cross_perm_avx2(
   const int* pixel_offset,
@@ -1368,8 +1350,8 @@ static void precalculate_cross_perm_avx2(
 // Safe partial load for 1-15 floats, padding with zeros to avoid NaN contamination
 // Using jump tables instead of multiple if-else, each case is extremely
 // optimized looking at the generated assembly..
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 static void _mm256_load_512_partial_safe(__m256 &A, __m256 &B, const float* src_ptr, int floats_to_load) {
   if (floats_to_load == 1) {
@@ -1445,8 +1427,8 @@ static void _mm256_load_512_partial_safe(__m256 &A, __m256 &B, const float* src_
 
 // resize_h_planar_float_avx2_xxx_vstripe_ks4 method #2: permutex-based, 16 pixel test version
 // like resize_h_planar_float_avx512_permutex_vstripe_ks4
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 void resize_h_planar_float_avx2_permutex_vstripe_ks4_pix16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
@@ -1698,8 +1680,8 @@ void resize_h_planar_float_avx2_gather_permutex_vstripe_ks4(BYTE* dst8, const BY
 
 // Helper, implemented for AVX2 (simulating zext)
 // zero-extend 128-bit float vector to 256-bit float vector
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 __forceinline static __m256 _mm256_zextps128_ps256_avx2(__m128 a)
 {
@@ -1710,8 +1692,8 @@ __forceinline static __m256 _mm256_zextps128_ps256_avx2(__m128 a)
 // 4 target pixels, each from 16 source pixel/coeff pair
 // Called only when accessing 16 source pixels and coefficients at a time is safe
 // AVX2 OPTIMIZATION: Process 2x8 blocks to simulate the 16-block stride
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 __forceinline static void process_pix4_coeff16_h_float_core_avx2(
   const float* src,
@@ -1753,8 +1735,8 @@ __forceinline static void process_pix4_coeff16_h_float_core_avx2(
 
 // 4 target pixels, each from 8 source pixel/coeff pair
 // Called only when accessing 8 source pixels and coefficients at a time is safe
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 __forceinline static void process_pix4_coeff8_h_float_core_avx2(
   const float* src,
@@ -1786,8 +1768,8 @@ __forceinline static void process_pix4_coeff8_h_float_core_avx2(
 // Called only for first iteration when results are not initialized.
 // Otherwise same as process_pix4_coeff8_h_float_core.
 // Optimized: Uses 256-bit MUL directly on zero-extended loads.
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 __forceinline static void process_pix4_coeff4_h_float_core_first_avx2(
   const float* src,
@@ -1825,10 +1807,10 @@ __forceinline static void process_pix4_coeff4_h_float_core_first_avx2(
 
 // filtersize_hint: special: 0..4 for 4,8,16,24,32. Generic: -1
 // filter_size is an aligned value and always multiple of 8 (prerequisite)
-#if defined(CLANG)
-__attribute__((__target__("fma")))
-#endif
 template<bool safe_aligned_mode, int filtersize_hint>
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
+#endif
 __forceinline static void process_four_pixels_h_float_pix4of16_ks_4_8_16_avx2(
   const float* src_ptr,
   int begin1, int begin2, int begin3, int begin4,
@@ -2046,10 +2028,10 @@ __forceinline static void process_four_pixels_h_float_pix4of16_ks_4_8_16_avx2(
 }
 
 
-#if defined(CLANG)
-__attribute__((__target__("fma")))
-#endif
 template<bool is_safe, int filtersize_hint>
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
+#endif
 __forceinline static void process_sixteen_pixels_h_float_pix16_sub4_ks_4_8_16_avx2(
   const float* src, int x, float* current_coeff_base,
   int filter_size, // 8, 16, 24, 32 are quasi-constexpr here, others not compile-time known but still aligned to 8
@@ -2272,8 +2254,8 @@ void resizer_h_avx2_generic_float_pix16_sub4_ks_4_8_16(BYTE* dst8, const BYTE* s
 
 //-------- 256 bit Verticals
 
-#if defined(CLANG)
-__attribute__((__target__("avx2")))
+#if defined(__clang__)
+__attribute__((__target__("avx2,fma")))
 #endif
 void resize_v_avx2_planar_uint8_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
@@ -2404,8 +2386,8 @@ void resize_v_avx2_planar_uint8_t(BYTE* dst8, const BYTE* src8, int dst_pitch, i
 }
 
 template<bool lessthan16bit>
-#if defined(CLANG)
-__attribute__((__target__("avx2")))
+#if defined(__clang__)
+__attribute__((__target__("avx2,fma")))
 #endif
 void resize_v_avx2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
@@ -2514,8 +2496,8 @@ void resize_v_avx2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, 
 
 //-------- 256 bit float Verticals
 
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 void resize_v_avx2_planar_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
@@ -2579,13 +2561,13 @@ void resize_v_avx2_planar_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int
 
 
 // Memory-transfer optimized version of resize_v_avx2_planar_float
-#if defined(CLANG)
-__attribute__((__target__("fma")))
+#if defined(__clang__)
+__attribute__((__target__("fma,avx2")))
 #endif
 void resize_v_avx2_planar_float_w_sr(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
   const int filter_size = program->filter_size;
-  const float* __restrict current_coeff = program->pixel_coefficient_float;
+  const float* __restrict current_coeff = program->pixel_coefficient_float + filter_size*MinY;
 
   const float* src = (const float*)src8;
   float* __restrict dst = (float*)dst8;

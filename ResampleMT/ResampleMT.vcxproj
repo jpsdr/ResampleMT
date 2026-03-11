@@ -167,6 +167,8 @@
     <ClCompile Include="MatrixClass.cpp" />
     <ClCompile Include="resample.cpp" />
     <ClCompile Include="resample_avx2.cpp" />
+    <ClCompile Include="resample_avx512.cpp" />
+    <ClCompile Include="resample_avx512b.cpp" />
     <ClCompile Include="resample_functions.cpp" />
     <ClCompile Include="resample_sse.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
@@ -177,6 +179,8 @@
     <ClInclude Include="MatrixClass.h" />
     <ClInclude Include="resample.h" />
     <ClInclude Include="resample_avx2.h" />
+    <ClInclude Include="resample_avx512.h" />
+    <ClInclude Include="resample_avx512.hpp" />
     <ClInclude Include="resample_functions.h" />
     <ClInclude Include="resample_sse.h" />
     <ClInclude Include="ThreadPool.h" />

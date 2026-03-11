@@ -169,7 +169,11 @@ struct ResamplingProgram
       //env->ThrowError("ResamplingProgram: Could not reserve memory.");
     }
 
-    cache_size_L2 = env->GetEnvProperty(AEP_CACHESIZE_L2);
+	// If AVS+, try to get L2 cache, otherwise set to 0.
+	if (env->FunctionExists("ConvertBits"))
+	{
+		try { cache_size_L2 = env->GetEnvProperty(AEP_CACHESIZE_L2); } catch (const AvisynthError&) { cache_size_L2=0; }
+	}
     const int pixel_size_bytes = (bits_per_pixel + 7) / 8;
     max_scanlines = resampler_h_detect_optimal_scanline(source_size, target_size, cache_size_L2, pixel_size_bytes);
 
