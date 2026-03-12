@@ -39,11 +39,11 @@
 #include "./resample.h"
 #include "./resample_sse.h"
 
+#define JPSDR_RESTRICT __restrict
+
 #if _MSC_VER >= 1900
-  #define JPSDR_RESTRICT __restrict
   #define JPSDR_CONSTEXPR constexpr
 #else
-  #define JPSDR_RESTRICT
   #define JPSDR_CONSTEXPR
 #endif
 
@@ -56,7 +56,7 @@
 #pragma warning(disable: 4309)
 #endif
 // fake _mm_packus_epi32 (orig is SSE4.1 only)
-static __forceinline __m128i _MM_PACKUS_EPI32( __m128i a, __m128i b )
+static AVS_FORCEINLINE __m128i _MM_PACKUS_EPI32( __m128i a, __m128i b )
 {
   const static __m128i val_32 = _mm_set1_epi32(0x8000);
   const static __m128i val_16 = _mm_set1_epi16(0x8000);
@@ -71,27 +71,27 @@ static __forceinline __m128i _MM_PACKUS_EPI32( __m128i a, __m128i b )
 #pragma warning(pop)
 #endif
 
-static __forceinline __m128i _MM_CMPLE_EPU16(__m128i x, __m128i y)
+static AVS_FORCEINLINE __m128i _MM_CMPLE_EPU16(__m128i x, __m128i y)
 {
   // Returns 0xFFFF where x <= y:
   return _mm_cmpeq_epi16(_mm_subs_epu16(x, y), _mm_setzero_si128());
 }
 
-static __forceinline __m128i _MM_BLENDV_SI128(__m128i x, __m128i y, __m128i mask)
+static AVS_FORCEINLINE __m128i _MM_BLENDV_SI128(__m128i x, __m128i y, __m128i mask)
 {
   // Replace bit in x with bit in y when matching bit in mask is set:
   return _mm_or_si128(_mm_andnot_si128(mask, x), _mm_and_si128(mask, y));
 }
 
 // sse2 simulation of SSE4's _mm_min_epu16
-static __forceinline __m128i _MM_MIN_EPU16(__m128i x, __m128i y)
+static AVS_FORCEINLINE __m128i _MM_MIN_EPU16(__m128i x, __m128i y)
 {
   // Returns x where x <= y, else y:
   return _MM_BLENDV_SI128(y, x, _MM_CMPLE_EPU16(x, y));
 }
 
 // sse2 simulation of SSE4's _mm_max_epu16
-static __forceinline __m128i _MM_MAX_EPU16(__m128i x, __m128i y)
+static AVS_FORCEINLINE __m128i _MM_MAX_EPU16(__m128i x, __m128i y)
 {
   // Returns x where x >= y, else y:
   return _MM_BLENDV_SI128(x, y, _MM_CMPLE_EPU16(x, y));
@@ -681,7 +681,7 @@ void resize_v_sse2_planar_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int
 // Based on AVX2 code, but without the filter_size alignment template
 
 template<typename pixel_t, bool lessthan16bit>
-__forceinline static void process_two_16pixels_h_uint8_16_core(const pixel_t* JPSDR_RESTRICT src, int begin1, int begin2, int i, const short* JPSDR_RESTRICT current_coeff, int filter_size, __m128i& result1, __m128i& result2, 
+AVS_FORCEINLINE static void process_two_16pixels_h_uint8_16_core(const pixel_t* JPSDR_RESTRICT src, int begin1, int begin2, int i, const short* JPSDR_RESTRICT current_coeff, int filter_size, __m128i& result1, __m128i& result2, 
   const __m128i& shifttosigned_or_zero128) {
 
   __m128i data_1_lo, data_1_hi, data_2_lo, data_2_hi;
@@ -725,7 +725,7 @@ __forceinline static void process_two_16pixels_h_uint8_16_core(const pixel_t* JP
 
 
 template<bool safe_aligned_mode, typename pixel_t, bool lessthan16bit>
-__forceinline static void process_two_pixels_h_uint8_16(const pixel_t* JPSDR_RESTRICT src_ptr, int begin1, int begin2, const short* JPSDR_RESTRICT current_coeff, int filter_size, __m128i& result1, __m128i& result2, int kernel_size, 
+AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* JPSDR_RESTRICT src_ptr, int begin1, int begin2, const short* JPSDR_RESTRICT current_coeff, int filter_size, __m128i& result1, __m128i& result2, int kernel_size, 
   const __m128i& shifttosigned_or_zero128) {
   int ksmod16;
   if JPSDR_CONSTEXPR (safe_aligned_mode)
@@ -860,7 +860,7 @@ template<bool is_safe, typename pixel_t, bool lessthan16bit>
 #if defined(GCC) || defined(CLANG)
 __attribute__((__target__("ssse3")))
 #endif
-__forceinline static void process_eight_pixels_h_uint8_16(const pixel_t* JPSDR_RESTRICT src, int x, const short* current_coeff_base, int filter_size,
+AVS_FORCEINLINE static void process_eight_pixels_h_uint8_16(const pixel_t* JPSDR_RESTRICT src, int x, const short* current_coeff_base, int filter_size,
   __m128i& rounder128, __m128i& shifttosigned_or_zero128, __m128i& clamp_limit_min, __m128i& clamp_limit_max,
   pixel_t* JPSDR_RESTRICT dst,
   ResamplingProgram* program)
@@ -1013,7 +1013,7 @@ void resizer_h_ssse3_generic_uint8_16(BYTE* dst8, const BYTE* src8, int dst_pitc
 
 //-------- 128 bit float Horizontals
 
-__forceinline static void process_two_8pixels_h_float(const float* src, int begin1, int begin2, int i, float* current_coeff, int filter_size, __m128& result1, __m128& result2) {
+AVS_FORCEINLINE static void process_two_8pixels_h_float(const float* src, int begin1, int begin2, int i, float* current_coeff, int filter_size, __m128& result1, __m128& result2) {
   __m128 data_1_low = _mm_loadu_ps(src + begin1 + i); // Load first 4 floats
   __m128 data_1_high = _mm_loadu_ps(src + begin1 + i + 4); // Load next 4 floats
   __m128 data_2_low = _mm_loadu_ps(src + begin2 + i); // Load first 4 floats
@@ -1031,7 +1031,7 @@ __forceinline static void process_two_8pixels_h_float(const float* src, int begi
 }
 
 template<bool safe_aligned_mode>
-__forceinline static void process_two_pixels_h_float(const float* src_ptr, int begin1, int begin2, float* current_coeff, int filter_size, __m128& result1, __m128& result2, int kernel_size) {
+AVS_FORCEINLINE static void process_two_pixels_h_float(const float* src_ptr, int begin1, int begin2, float* current_coeff, int filter_size, __m128& result1, __m128& result2, int kernel_size) {
   int ksmod8;
   // 32 bytes contain 8 floats
   if JPSDR_CONSTEXPR (safe_aligned_mode)
@@ -1098,7 +1098,7 @@ template<bool is_safe>
 #if defined(GCC) || defined(CLANG)
 __attribute__((__target__("ssse3")))
 #endif
-__forceinline static void process_eight_pixels_h_float(const float* src, int x, float* current_coeff_base, int filter_size,
+AVS_FORCEINLINE static void process_eight_pixels_h_float(const float* src, int x, float* current_coeff_base, int filter_size,
   __m128& zero128,
   float* dst,
   ResamplingProgram* program)
@@ -1194,7 +1194,7 @@ void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, 
 // - reading beyond the end of the source buffer.
 // - avoid NaN contamination, since event with zero coefficients NaN * 0 = NaN
 template <int Nmod4>
-__forceinline static __m128 load_partial_safe_sse2(const float* src_ptr_offsetted) {
+AVS_FORCEINLINE static __m128 load_partial_safe_sse2(const float* src_ptr_offsetted) {
   switch (Nmod4) {
   case 1:
     return _mm_set_ps(0.0f, 0.0f, 0.0f, src_ptr_offsetted[0]);

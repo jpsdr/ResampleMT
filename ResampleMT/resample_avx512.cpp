@@ -32,8 +32,8 @@
 // which is not derived from or based on Avisynth, such as 3rd-party filters,
 // import and export plugins, or graphical user interfaces.
 
-// VS 2019 v16.2
-#if _MSC_VER >= 1922
+// VS 2017 v15.3
+#if _MSC_VER >= 1911
 
 
 #include "./avs/alignment.h"
@@ -43,6 +43,16 @@
 #include <type_traits>
 
 #include <immintrin.h> // Includes AVX-512 intrinsics
+
+#if _MSC_VER < 1922 // Check for MSVC version less than 16.2 (VS 2019 16.2)
+  // Define missing AVX-512BW mask intrinsics for older MSVC.
+  // inline functions that perform the mask operations directly.
+  // Since this is MSVC only, using specific __forceinline.
+__forceinline __mmask64 _kand_mask64(__mmask64 a, __mmask64 b) { return a & b; }
+__forceinline __mmask64 _kor_mask64(__mmask64 a, __mmask64 b) { return a | b; }
+__forceinline __mmask32 _kand_mask32(__mmask32 a, __mmask32 b) { return a & b; }
+__forceinline __mmask32 _kor_mask32(__mmask32 a, __mmask32 b) { return a | b; }
+#endif
 
 #include "./resample_avx512.hpp"
 

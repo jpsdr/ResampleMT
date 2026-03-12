@@ -52,13 +52,9 @@
 // VS 2017 v15.3
 #if _MSC_VER >= 1911
   #define JPSDR_CONSTEXPR constexpr
+  #define AVX512_BUILD_POSSIBLE
 #else
   #define JPSDR_CONSTEXPR
-#endif
-
-// VS 2019 v16.2
-#if _MSC_VER >= 1922
-#define AVX512_BUILD_POSSIBLE
 #endif
 
 #ifdef AVX2_BUILD_POSSIBLE
