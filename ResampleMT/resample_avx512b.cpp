@@ -638,7 +638,7 @@ template<bool is_safe, typename pixel_t, bool lessthan16bit, int FixedFilterSize
 __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnni,avx512vbmi,avx512vbmi2,avx512bitalg,avx512vpopcntdq")))
 #endif
 AVS_FORCEINLINE static void process_sixteen_pixels_h_avx512(const pixel_t * src, int x, const short* current_coeff_base, int filter_size,
-  int rounder_scalar, __m256i& shifttosigned, __m256i& clamp_limit,
+  int rounder_scalar, __m256i& shifttosigned, __m256i& clamp_limit_min, __m256i& clamp_limit_max,
   pixel_t* dst, ResamplingProgram* program)
 {
   int run_filter_size_stride = (FixedFilterSize >= 1) ? FixedFilterSize : filter_size; // quasi constexpr if templated
@@ -761,9 +761,8 @@ AVS_FORCEINLINE static void process_sixteen_pixels_h_avx512(const pixel_t * src,
   __m256i result_16 = _mm256_packus_epi32(scaled_lo, scaled_hi);
 
   // we have 8x16 bit unsigned pixels now in result_16
-  if constexpr (sizeof(pixel_t) == 2 && lessthan16bit) {
-    result_16 = _mm256_min_epu16(result_16, clamp_limit);
-  }
+  result_16 = _mm256_min_epu16(result_16, clamp_limit_max);
+  result_16 = _mm256_max_epu16(result_16, clamp_limit_min);
 
   result_16 =  _mm256_permute4x64_epi64(result_16, (0 << 0) | (2 << 2) | (1 << 4) | (3 << 6));
 
@@ -783,12 +782,34 @@ template<typename pixel_t, bool lessthan16bit, int FixedFilterSize>
 #if defined(__clang__)
 __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnni,avx512vbmi,avx512vbmi2,avx512bitalg,avx512vpopcntdq")))
 #endif
-static void internal_resizer_h_avx512_generic(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel) {
+static void internal_resizer_h_avx512_generic(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,
+	const uint8_t range,const bool mode_YUY2)
+{
   int current_fp_scale_bits = (sizeof(pixel_t) == 1) ? FPScale8bits : FPScale16bits;
   int rounder_scalar = 1 << (current_fp_scale_bits - 1);
 
   __m256i shifttosigned = _mm256_set1_epi16(-32768);
-  __m256i clamp_limit = _mm256_set1_epi16((short)((1 << bits_per_pixel) - 1));
+  __m256i clamp_limit_min,clamp_limit_max;
+
+  if constexpr (sizeof(pixel_t) == 1)
+  {
+	const int val_min = (range==1) ? 0 : 16;
+	const int val_max = ((range==1) || (range==4)) ? 255 : (range==2) ? 235 : 240;
+
+	clamp_limit_min = _mm256_set1_epi16((short)((val_min << 8)|val_min));
+	clamp_limit_max = (mode_YUY2 && ((range>=2) && (range<=3))) ?
+	  _mm256_set1_epi16((short)(((int)240 << 8)|235)) : _mm256_set1_epi16((short)((val_max << 8)|val_max));	  
+  }
+  else
+  {
+    const uint16_t val_min = (range==1) ? 0 : (int)16 << (bits_per_pixel-8);
+    const uint16_t val_max = ((range==1) || (range==4)) ? ((int)1 << bits_per_pixel)-1 : (range==2) ?
+      ((int)235 << (bits_per_pixel-8)) : ((int)240 << (bits_per_pixel-8));
+
+    clamp_limit_min = _mm256_set1_epi16(val_min);
+    clamp_limit_max = _mm256_set1_epi16(val_max);	  
+  }
+
 
   const pixel_t* src = reinterpret_cast<const pixel_t*>(src8);
   pixel_t* dst = reinterpret_cast<pixel_t*>(dst8);
@@ -802,10 +823,12 @@ static void internal_resizer_h_avx512_generic(BYTE* dst8, const BYTE* src8, int 
 
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < w_safe; x += PIXELS_AT_A_TIME) {
-      process_sixteen_pixels_h_avx512<true, pixel_t, lessthan16bit, FixedFilterSize>(src, x, program->pixel_coefficient, filter_size, rounder_scalar, shifttosigned, clamp_limit, dst, program);
+      process_sixteen_pixels_h_avx512<true, pixel_t, lessthan16bit, FixedFilterSize>(src, x, program->pixel_coefficient, filter_size, rounder_scalar, shifttosigned,
+		clamp_limit_min, clamp_limit_max, dst, program);
     }
     for (int x = w_safe; x < width; x += PIXELS_AT_A_TIME) {
-      process_sixteen_pixels_h_avx512<false, pixel_t, lessthan16bit, FixedFilterSize>(src, x, program->pixel_coefficient, filter_size, rounder_scalar, shifttosigned, clamp_limit, dst, program);
+      process_sixteen_pixels_h_avx512<false, pixel_t, lessthan16bit, FixedFilterSize>(src, x, program->pixel_coefficient, filter_size, rounder_scalar, shifttosigned,
+		clamp_limit_min, clamp_limit_max, dst, program);
     }
     dst += dst_pitch;
     src += src_pitch;
@@ -818,13 +841,13 @@ void resizer_h_avx512_generic_uint8_t(BYTE* dst8, const BYTE* src8, int dst_pitc
 {
   int fs = program->filter_size; // aligned coeff stride
   // Dispatch to optimized templates based on filter size
-  if (fs == 4)  internal_resizer_h_avx512_generic<uint8_t, true, 4>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 8)  internal_resizer_h_avx512_generic<uint8_t, true, 8>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 12) internal_resizer_h_avx512_generic<uint8_t, true, 12>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 16) internal_resizer_h_avx512_generic<uint8_t, true, 16>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 32) internal_resizer_h_avx512_generic<uint8_t, true, 32>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 48) internal_resizer_h_avx512_generic<uint8_t, true, 48>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else internal_resizer_h_avx512_generic<uint8_t, true, -1>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
+  if (fs == 4)  internal_resizer_h_avx512_generic<uint8_t, true, 4>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 8)  internal_resizer_h_avx512_generic<uint8_t, true, 8>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 12) internal_resizer_h_avx512_generic<uint8_t, true, 12>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 16) internal_resizer_h_avx512_generic<uint8_t, true, 16>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 32) internal_resizer_h_avx512_generic<uint8_t, true, 32>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 48) internal_resizer_h_avx512_generic<uint8_t, true, 48>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else internal_resizer_h_avx512_generic<uint8_t, true, -1>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
 }
 
 // 16 bit Horizontal Dispatcher
@@ -835,13 +858,13 @@ void resizer_h_avx512_generic_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pit
 {
   const int fs = program->filter_size; // aligned coeff stride
   // Dispatch to optimized templates based on filter size
-  if (fs == 4)       internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 4>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 8)  internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 8>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 12) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 12>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 16) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 16>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 32) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 32>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else if (fs == 48) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 48>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
-  else               internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, -1>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel);
+  if (fs == 4)       internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 4>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 8)  internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 8>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 12) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 12>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 16) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 16>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 32) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 32>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else if (fs == 48) internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, 48>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
+  else               internal_resizer_h_avx512_generic<uint16_t, lessthan16bit, -1>(dst8, src8, dst_pitch, src_pitch, program, width, height, bits_per_pixel, range, mode_YUY2);
 }
 
 // Explicit template instantiation
@@ -968,6 +991,9 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_float_avx512_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
 
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
   // needed for partial load
@@ -1101,6 +1127,9 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_float_avx512_transpose_vstripe_ks8(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
 
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
@@ -1294,6 +1323,10 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_float_avx512_permutex_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -1417,6 +1450,10 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_float_avx512_permutex_vstripe_ks8(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -1565,6 +1602,10 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_float_avx512_permutex_vstripe_2s8_ks8(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -1736,6 +1777,10 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_float_avx512_permutex_vstripe_ks16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -1961,6 +2006,10 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_float_avx512_permutex_vstripe_2s8_ks16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -2213,6 +2262,11 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_v_avx512_planar_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(storage);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
   const float* AVS_RESTRICT current_coeff = program->pixel_coefficient_float + filter_size*MinY;
 
@@ -2277,6 +2331,11 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_v_avx512_planar_float_w_sr(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(storage);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
   const float* AVS_RESTRICT current_coeff = (const float* AVS_RESTRICT)program->pixel_coefficient_float + filter_size*MinY;
 
@@ -2462,6 +2521,9 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_v_avx512_planar_uint8_t_w_sr(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(storage);
+
   int filter_size = program->filter_size;
   const short* AVS_RESTRICT current_coeff = program->pixel_coefficient + filter_size*MinY;
   __m512i rounder = _mm512_set1_epi32(1 << (FPScale8bits - 1));
@@ -2643,6 +2705,9 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_v_avx512_planar_uint16_t_w_sr(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(storage);
+  AVS_UNUSED(mode_YUY2);
+
   int filter_size = program->filter_size;
   const short* AVS_RESTRICT current_coeff = program->pixel_coefficient + filter_size*MinY;
 
@@ -3271,6 +3336,8 @@ AVS_FORCEINLINE static void process_sixteen_pixels_h_float_pix16_sub4_ks_4_8_16(
 template<int filtersize_hint>
 static void internal_resizer_h_avx512_generic_float_pix16_sub4_ks_4_8_16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   // filter_size is aligned to 8 (prerequisite), contrary that we have a special case for filter size <=4
 
   // We note that when template is used, filter_size is quasi-constexpr if filtersize_hint != -1.
@@ -3326,6 +3393,9 @@ static void internal_resizer_h_avx512_generic_float_pix16_sub4_ks_4_8_16(BYTE* d
 // - Depending on the filter size, calculates in chunks of 16, then 8, then 4 source pixels and coeffs at a time.
 void resizer_h_avx512_generic_float_pix16_sub4_ks_4_8_16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
 
   // Dispatcher template now supports filter_size aligned to 8 (8, 16, 24, 32) and a special case for <=4
@@ -3390,6 +3460,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint16_avx512_permutex_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   const uint16_t* src = (uint16_t*)src8;
@@ -3635,6 +3707,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint16_avx512_permutex_vstripe_ks8(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   const uint16_t* src = (const uint16_t*)src8;
@@ -3969,6 +4043,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 void resize_h_planar_uint16_avx512_permutex_vstripe_2s16_ks8(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height,
 	int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
 
   const uint16_t* src = (const uint16_t*)src8;

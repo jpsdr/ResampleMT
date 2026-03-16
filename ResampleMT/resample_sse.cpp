@@ -101,6 +101,8 @@ static AVS_FORCEINLINE __m128i _MM_MAX_EPU16(__m128i x, __m128i y)
 #ifdef X86_32
 void resize_v_mmx_planar(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(storage);
+
   const int filter_size = program->filter_size;
   const int kernel_size = program->filter_size_real;
   const short* JPSDR_RESTRICT current_coeff = program->pixel_coefficient + filter_size*MinY;
@@ -261,6 +263,8 @@ void resize_v_mmx_planar(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pi
 
 void resize_v_sse2_planar(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(storage);
+
   const int filter_size = program->filter_size;
   const int kernel_size = program->filter_size_real;
   const short* JPSDR_RESTRICT current_coeff = program->pixel_coefficient + filter_size*MinY;
@@ -434,6 +438,9 @@ void resize_v_sse2_planar(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_p
 template<bool lessthan16bit>
 void resize_v_sse2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(storage);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
   const short* JPSDR_RESTRICT current_coeff = program->pixel_coefficient + filter_size*MinY;
 
@@ -571,6 +578,11 @@ void resize_v_sse2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, 
 // Process each row with its coefficient
 void resize_v_sse2_planar_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(storage);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
   const float* JPSDR_RESTRICT current_coeff = program->pixel_coefficient_float + filter_size*MinY;
 
@@ -1158,6 +1170,10 @@ __attribute__((__target__("ssse3")))
 #endif
 void resizer_h_ssse3_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   int filter_size = program->filter_size;
   __m128 zero128 = _mm_setzero_ps();
 
@@ -1221,6 +1237,10 @@ AVS_FORCEINLINE static __m128 load_partial_safe_sse2(const float* src_ptr_offset
 template<int filtersizemod4>
 void resize_h_planar_float_sse_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);

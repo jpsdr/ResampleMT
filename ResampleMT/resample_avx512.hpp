@@ -317,6 +317,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 static void resize_h_planar_uint8_avx512_permutex_vstripe_ks4_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   constexpr int PIXELS_AT_A_TIME = 64;
@@ -649,6 +651,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 static void resize_h_planar_uint8_avx512_permutex_vstripe_ks8_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   constexpr int PIXELS_AT_A_TIME = 64;
@@ -1090,6 +1094,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 static void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   constexpr int PIXELS_AT_A_TIME = 64;
@@ -1549,6 +1555,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 static void resize_h_planar_uint8_avx512_permutex_vstripe_ks16_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   constexpr int PIXELS_AT_A_TIME = 32;
@@ -2096,6 +2104,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks4_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   constexpr int PIXELS_AT_A_TIME = 64;
@@ -2444,6 +2454,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   constexpr int PIXELS_AT_A_TIME = 64;
@@ -2906,6 +2918,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   constexpr int PIXELS_AT_A_TIME = 32;
@@ -3473,6 +3487,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks4_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   const uint16_t* src = (uint16_t*)src8;
@@ -3739,6 +3755,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks8_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   const uint16_t* src = (uint16_t*)src8;
@@ -4111,6 +4129,8 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 #endif
 void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks16_internal(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel,const uint8_t range,const bool mode_YUY2)
 {
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   const uint16_t* src = (uint16_t*)src8;

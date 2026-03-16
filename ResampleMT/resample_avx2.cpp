@@ -36,6 +36,7 @@
 #if _MSC_VER >= 1800
 
 #include <immintrin.h>
+#include "./avisynth.h"
 #include "./resample_functions.h"
 
 #ifndef _mm256_set_m128i
@@ -649,6 +650,8 @@ template<int filtersizealigned8>
 __attribute__((__target__("fma,avx2")))
 #endif
 static void internal_resizer_h_avx2_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel) {
+  AVS_UNUSED(bits_per_pixel);
+
   const int filter_size = (filtersizealigned8 >= 1) ? filtersizealigned8 * 8 : program->filter_size;
   // knowing a quasi-constexpr filter_size from template for commonly used sizes
   // aligned_filter_size 8, 16, 24, 32 hugely helps compiler optimization
@@ -736,7 +739,12 @@ template<int filtersizemod4>
 #if defined(__clang__)
 __attribute__((__target__("fma,avx2")))
 #endif
-void resize_h_planar_float_avx_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2) {
+void resize_h_planar_float_avx_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
+{
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -950,6 +958,10 @@ __attribute__((__target__("fma,avx2")))
 #endif
 void resize_h_planar_float_avx2_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -1112,6 +1124,10 @@ __attribute__((__target__("fma,avx2")))
 #endif
 void resize_h_planar_float_avx2_permutex_vstripe_ks4(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -1432,6 +1448,10 @@ __attribute__((__target__("fma,avx2")))
 #endif
 void resize_h_planar_float_avx2_permutex_vstripe_ks4_pix16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size; // aligned, practically the coeff table stride
 
   src_pitch /= sizeof(float);
@@ -2169,6 +2189,9 @@ AVS_FORCEINLINE static void process_sixteen_pixels_h_float_pix16_sub4_ks_4_8_16_
 
 void resizer_h_avx2_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size_numOfBlk8 = AlignNumber(program->filter_size_real,8) >> 3;
 
   if (filter_size_numOfBlk8 == 1)
@@ -2188,6 +2211,7 @@ void resizer_h_avx2_generic_float(BYTE* dst8, const BYTE* src8, int dst_pitch, i
 template<int filtersize_hint>
 static void internal_resizer_h_avx2_generic_float_pix16_sub4_ks_4_8_16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel)
 {
+  AVS_UNUSED(bits_per_pixel);
 
   // We note that when template is used, filter_size is quasi-constexpr if filtersize_hint != -1.
   // When filtersize_hint == -1, then program->filter_size is aligned to 8 anyway, but not known at compile time.
@@ -2226,6 +2250,9 @@ static void internal_resizer_h_avx2_generic_float_pix16_sub4_ks_4_8_16(BYTE* dst
 // Winner implementation: resizer_h_avx2_generic_float_pix16_sub4_ks_4_8_16;
 void resizer_h_avx2_generic_float_pix16_sub4_ks_4_8_16(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int height, int bits_per_pixel, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
 
   // Dispatcher template now supports filter_size aligned to 8 (8, 16, 24, 32) and a special case for <=4
@@ -2259,6 +2286,9 @@ __attribute__((__target__("avx2,fma")))
 #endif
 void resize_v_avx2_planar_uint8_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(storage);
+
     int filter_size = program->filter_size;
     const short* __restrict current_coeff = program->pixel_coefficient + filter_size*MinY;
     __m256i rounder = _mm256_set1_epi32(1 << (FPScale8bits - 1));
@@ -2391,6 +2421,9 @@ __attribute__((__target__("avx2,fma")))
 #endif
 void resize_v_avx2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(storage);
+  AVS_UNUSED(mode_YUY2);
+  
   int filter_size = program->filter_size;
   const short* __restrict current_coeff = program->pixel_coefficient + filter_size*MinY;
 
@@ -2501,6 +2534,11 @@ __attribute__((__target__("fma,avx2")))
 #endif
 void resize_v_avx2_planar_float(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(storage);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
   const float* __restrict current_coeff = program->pixel_coefficient_float + filter_size*MinY;
 
@@ -2566,6 +2604,11 @@ __attribute__((__target__("fma,avx2")))
 #endif
 void resize_v_avx2_planar_float_w_sr(BYTE* dst8, const BYTE* src8, int dst_pitch, int src_pitch, ResamplingProgram* program, int width, int bits_per_pixel, int MinY, int MaxY, const int* pitch_table, const void* storage, const uint8_t range, const bool mode_YUY2)
 {
+  AVS_UNUSED(bits_per_pixel);
+  AVS_UNUSED(storage);
+  AVS_UNUSED(range);
+  AVS_UNUSED(mode_YUY2);
+
   const int filter_size = program->filter_size;
   const float* __restrict current_coeff = program->pixel_coefficient_float + filter_size*MinY;
 
