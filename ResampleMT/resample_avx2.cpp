@@ -37,6 +37,14 @@
 // VS 2013
 #if _MSC_VER >= 1800
 
+// VS 2019
+#if (_MSC_VER >= 1922) || defined(__clang__)
+  #define JPSDR_CONSTEXPR constexpr
+#else
+  #define JPSDR_CONSTEXPR
+#endif
+
+
 #include <intrin.h> // MSVC
 
 #include <vector>
@@ -153,7 +161,7 @@ AVS_FORCEINLINE static void process_two_16pixels_h_uint8_16_core(const pixel_t* 
 
   __m256i data_1, data_2;
 
-  if constexpr (sizeof(pixel_t) == 1) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
     // pixel_t is uint8_t
     data_1 = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin1 + i)));
     data_2 = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin2 + i)));
@@ -161,10 +169,10 @@ AVS_FORCEINLINE static void process_two_16pixels_h_uint8_16_core(const pixel_t* 
   else {
     // pixel_t is uint16_t, at exact 16 bit size an unsigned -> signed 16 bit conversion needed
     data_1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + begin1 + i));
-    if constexpr (!lessthan16bit)
+    if JPSDR_CONSTEXPR (!lessthan16bit)
       data_1 = _mm256_add_epi16(data_1, shifttosigned); // unsigned -> signed
     data_2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + begin2 + i));
-    if constexpr (!lessthan16bit)
+    if JPSDR_CONSTEXPR (!lessthan16bit)
       data_2 = _mm256_add_epi16(data_2, shifttosigned); // unsigned -> signed
   }
   __m256i coeff_1 = _mm256_load_si256(reinterpret_cast<const __m256i*>(current_coeff)); // 16 coeffs
@@ -186,7 +194,7 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
   // aligned_filter_size 16, 32, 48, 64, hugely helps compiler optimization
 
   int ksmod16;
-  if constexpr (safe_aligned_mode)
+  if JPSDR_CONSTEXPR (safe_aligned_mode)
     ksmod16 = filter_size / 16 * 16;
   else
     ksmod16 = kernel_size / 16 * 16; // danger zone, scanline overread possible. Use exact unaligned kernel_size
@@ -199,7 +207,7 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
     process_two_16pixels_h_uint8_16_core<pixel_t, lessthan16bit, filtersizealigned16>(src_ptr, begin1, begin2, i, current_coeff + i, filter_size, result1, result2, shifttosigned);
   }
 
-  if constexpr (!safe_aligned_mode) {
+  if JPSDR_CONSTEXPR (!safe_aligned_mode) {
     // working with the original, unaligned kernel_size
     if (i == kernel_size) return;
 
@@ -211,12 +219,12 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
     if (i < ksmod8) {
       // Process 8 elements for first pixel
       __m128i data_1;
-      if constexpr (sizeof(pixel_t) == 1)
+      if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1)
         data_1 = _mm_cvtepu8_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(src_ptr1 + i)));
       else {
         // uint16_t
         data_1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src_ptr1 + i));
-        if constexpr (!lessthan16bit)
+        if JPSDR_CONSTEXPR (!lessthan16bit)
           data_1 = _mm_add_epi16(data_1, _mm256_castsi256_si128(shifttosigned)); // unsigned -> signed
       }
 
@@ -225,11 +233,11 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
 
       // Process 8 elements for second pixel
       __m128i data_2;
-      if constexpr (sizeof(pixel_t) == 1)
+      if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1)
         data_2 = _mm_cvtepu8_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(src_ptr2 + i)));
       else {
         data_2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src_ptr2 + i));
-        if constexpr (!lessthan16bit)
+        if JPSDR_CONSTEXPR (!lessthan16bit)
           data_2 = _mm_add_epi16(data_2, _mm256_castsi256_si128(shifttosigned)); // unsigned -> signed
       }
       __m128i coeff_2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(current_coeff2 + i));
@@ -251,11 +259,11 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
     if (i < ksmod4) {
       // Process 4 elements for first pixel
       __m128i data_1;
-      if constexpr (sizeof(pixel_t) == 1)
+      if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1)
         data_1= _mm_cvtepu8_epi16(_mm_cvtsi32_si128(*reinterpret_cast<const int*>(src_ptr1 + i)));
       else {
         data_1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src_ptr1 + i));
-        if constexpr (!lessthan16bit)
+        if JPSDR_CONSTEXPR (!lessthan16bit)
           data_1 = _mm_add_epi16(data_1, _mm256_castsi256_si128(shifttosigned)); // unsigned -> signed
       }
       __m128i coeff_1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(current_coeff + i));
@@ -263,11 +271,11 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
 
       // Process 4 elements for second pixel
       __m128i data_2;
-      if constexpr (sizeof(pixel_t) == 1)
+      if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1)
         data_2 = _mm_cvtepu8_epi16(_mm_cvtsi32_si128(*reinterpret_cast<const int*>(src_ptr2 + i)));
       else {
         data_2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src_ptr2 + i));
-        if constexpr (!lessthan16bit)
+        if JPSDR_CONSTEXPR (!lessthan16bit)
           data_2 = _mm_add_epi16(data_2, _mm256_castsi256_si128(shifttosigned)); // unsigned -> signed
       }
       __m128i coeff_2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(current_coeff2 + i));
@@ -292,7 +300,7 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
 
 
       for (; i < kernel_size; i++) {
-        if constexpr (sizeof(pixel_t) == 1) {
+        if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
           scalar_sum1[i % 4] += src_ptr1[i] * current_coeff[i];
           scalar_sum2[i % 4] += src_ptr2[i] * current_coeff2[i];
         }
@@ -300,7 +308,7 @@ AVS_FORCEINLINE static void process_two_pixels_h_uint8_16(const pixel_t* __restr
           uint16_t pix1 = src_ptr1[i];
           uint16_t pix2 = src_ptr2[i];
 
-          if constexpr (!lessthan16bit) {
+          if JPSDR_CONSTEXPR (!lessthan16bit) {
             pix1 -= 32768;
             pix2 -= 32768;
           }
@@ -384,7 +392,7 @@ AVS_FORCEINLINE static void process_eight_pixels_h_uint8_16(const pixel_t* src, 
   __m256i result_8x_uint32 = _mm256_set_m128i(pix5678, pix1234);
 
   // correct if signed, scale back, store
-  if constexpr (sizeof(pixel_t) == 2 && !lessthan16bit) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 2 && !lessthan16bit) {
     const __m256i shiftfromsigned = _mm256_set1_epi32(+32768 << FPScale16bits); // yes, 32 bit data. for 16 bits only
     result_8x_uint32 = _mm256_add_epi32(result_8x_uint32, shiftfromsigned);
   }
@@ -396,13 +404,13 @@ AVS_FORCEINLINE static void process_eight_pixels_h_uint8_16(const pixel_t* src, 
   __m256i result_2x4x_uint16 = _mm256_packus_epi32(result, result /* n/a */);
   __m128i result_2x4x_uint16_128 = _mm256_castsi256_si128(_mm256_permute4x64_epi64(result_2x4x_uint16, (0 << 0) | (2 << 2) | (0 << 4) | (0 << 6)));
 
-  if constexpr (sizeof(pixel_t) == 2)
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 2)
   {
     result_2x4x_uint16_128 = _mm_max_epu16(result_2x4x_uint16_128, clamp_limit_min);
     result_2x4x_uint16_128 = _mm_min_epu16(result_2x4x_uint16_128, clamp_limit_max);
   }
 
-  if constexpr (sizeof(pixel_t) == 1)
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1)
   {
     __m128i result_2x4x_uint8 = _mm_packus_epi16(result_2x4x_uint16_128, _mm_setzero_si128());
 	result_2x4x_uint8 = _mm_max_epu8(result_2x4x_uint8,clamp_limit_min);
@@ -431,7 +439,7 @@ static void internal_resizer_h_avx2_generic_uint8_16_t(BYTE* dst8, const BYTE* s
 
   __m128i clamp_limit_min,clamp_limit_max;
   
-  if constexpr (sizeof(pixel_t) == 1)
+  if (sizeof(pixel_t) == 1)
   {
 	const int val_min = (range==1) ? 0 : 16;
 	const int val_max = ((range==1) || (range==4)) ? 255 : (range==2) ? 235 : 240;
@@ -538,7 +546,7 @@ __attribute__((__target__("fma,avx2")))
 AVS_FORCEINLINE static void process_two_pixels_h_float(const float* src_ptr, int begin1, int begin2, float* current_coeff, int filter_size, __m256& result1, __m256& result2, int kernel_size) {
   int ksmod8;
   // 32 bytes contain 8 floats
-  if constexpr (safe_aligned_mode)
+  if JPSDR_CONSTEXPR (safe_aligned_mode)
     ksmod8 = filter_size / 8 * 8;
   else
     ksmod8 = kernel_size / 8 * 8; // danger zone, scanline overread possible. Use exact unaligned kernel_size
@@ -551,7 +559,7 @@ AVS_FORCEINLINE static void process_two_pixels_h_float(const float* src_ptr, int
     process_pix2_coeff8_h_float_core(src_ptr, begin1, begin2, i, current_coeff + i, filter_size, result1, result2);
   }
 
-  if constexpr (!safe_aligned_mode) {
+  if JPSDR_CONSTEXPR (!safe_aligned_mode) {
     // working with the original, unaligned kernel_size
     if (i == kernel_size) return;
 
@@ -1044,7 +1052,7 @@ void resize_v_avx2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, 
 
         __m256i src_even = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src2_ptr)); // 16x 16bit pixels
         __m256i src_odd = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src2_ptr + src_pitch));  // 16x 16bit pixels
-        if constexpr (!lessthan16bit)
+        if JPSDR_CONSTEXPR (!lessthan16bit)
 		{
           src_even = _mm256_add_epi16(src_even, shifttosigned);
           src_odd = _mm256_add_epi16(src_odd, shifttosigned);
@@ -1065,7 +1073,7 @@ void resize_v_avx2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, 
         __m256i coeff = _mm256_set1_epi16(current_coeff[i]); // 0|co|0|co|0|co|0|co   0|co|0|co|0|co|0|co
 
         __m256i src_even = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src2_ptr)); // 16x 16bit pixels
-        if constexpr (!lessthan16bit)
+        if JPSDR_CONSTEXPR (!lessthan16bit)
 		{
           src_even = _mm256_add_epi16(src_even, shifttosigned);
         }
@@ -1080,7 +1088,7 @@ void resize_v_avx2_planar_uint16_t(BYTE* dst8, const BYTE* src8, int dst_pitch, 
       // correct if signed, scale back, store
       __m256i result_lo = result_single_lo;
       __m256i result_hi = result_single_hi;
-      if constexpr (!lessthan16bit)
+      if JPSDR_CONSTEXPR (!lessthan16bit)
 	  {
         result_lo = _mm256_add_epi32(result_lo, shiftfromsigned);
         result_hi = _mm256_add_epi32(result_hi, shiftfromsigned);
@@ -1397,7 +1405,7 @@ void resize_h_planar_float_avx_transpose_vstripe_ks4(BYTE* dst8, const BYTE* src
       __m256 data_3_data_7;
       __m256 data_4_data_8;
 
-      if constexpr (partial_load) {
+      if JPSDR_CONSTEXPR (partial_load) {
         // In the potentially unsafe zone (near the right edge of the image), we use a safe loading function
         // to prevent reading beyond the allocated source scanline. This handles cases where loading 4 floats
         // starting from 'src_ptr + beginX' might exceed the source buffer.
@@ -1629,7 +1637,7 @@ void resize_h_planar_float_avx2_transpose_vstripe_ks4(BYTE* dst8, const BYTE* sr
         __m256 data_3_data_7;
         __m256 data_4_data_8;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // In the potentially unsafe zone (near the right edge of the image), we use a safe loading function
           // to prevent reading beyond the allocated source scanline. This handles cases where loading 4 floats
           // starting from 'src_ptr + beginX' might exceed the source buffer.
@@ -1805,7 +1813,7 @@ void resize_h_planar_float_avx2_permutex_vstripe_ks4(BYTE* dst8, const BYTE* src
         // process scanline y
         __m256 data_src;
         // We'll need exactly 8 floats starting from src+iStart
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // In the potentially unsafe zone (near the right edge of the image), we use a safe loading function
           // to prevent reading beyond the allocated source scanline. This handles cases where loading 8 floats
           // starting from 'src_ptr + beginX' might exceed the source buffer.
@@ -2154,7 +2162,7 @@ void resize_h_planar_float_avx2_permutex_vstripe_ks4_pix16(BYTE* dst8, const BYT
 
         //__m256 data_src;
         // We'll need exactly 2x8 floats starting from src+begin1
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // In the potentially unsafe zone (near the right edge of the image), we use a safe loading function
           // to prevent reading beyond the allocated source scanline. This handles cases where loading 8 floats
           // starting from 'src_ptr + beginX' might exceed the source buffer.
@@ -2441,8 +2449,8 @@ AVS_FORCEINLINE static void process_four_pixels_h_float_pix4of16_ks_4_8_16_avx2(
 {
 
   // very special case: filter size <= 4
-  if constexpr (safe_aligned_mode) {
-    if constexpr(filtersize_hint == 0) {
+  if JPSDR_CONSTEXPR (safe_aligned_mode) {
+    if JPSDR_CONSTEXPR (filtersize_hint == 0) {
       // Process 4 target pixels and 4 source pixels/coefficients at a time
       // XMM-based loop internally, but returns __m256 with upper 128 cleared
       // Do not assume initialized zeros in result1..4, they will be set here.
@@ -2461,7 +2469,7 @@ AVS_FORCEINLINE static void process_four_pixels_h_float_pix4of16_ks_4_8_16_avx2(
 
   int i = 0;
 #ifdef HAS_COEFF16_STEP
-  if constexpr(filtersize_hint == -1) {
+  if JPSDR_CONSTEXPR (filtersize_hint == -1) {
     // Handle 2x16 coeffs first, since we know that real filter size is over 32 here, because of filtersize_hint == -1
     const int ksmod16_sure = 32;
     // this will be unrolled probably
@@ -2502,16 +2510,16 @@ AVS_FORCEINLINE static void process_four_pixels_h_float_pix4of16_ks_4_8_16_avx2(
   }
 
   // filter sizes 16 or 32 can return here
-  if constexpr (safe_aligned_mode && (filtersize_hint == 2 || filtersize_hint == 4)) {
+  if JPSDR_CONSTEXPR (safe_aligned_mode && (filtersize_hint == 2 || filtersize_hint == 4)) {
     return;
   }
 
-  if constexpr (!safe_aligned_mode) {
+  if JPSDR_CONSTEXPR (!safe_aligned_mode) {
     if (i == kernel_size) return; // kernel_size is not known compile time
   }
 #else
   // no coeff16 step
-  if constexpr (filtersize_hint == -1) {
+  if JPSDR_CONSTEXPR (filtersize_hint == -1) {
     // Handle 4x8 coeffs first, since we know that real filter size is over 32 here, because of filtersize_hint == -1
     const int ksmod8_sure = 32;
     // this will be unrolled probably
@@ -2547,7 +2555,7 @@ AVS_FORCEINLINE static void process_four_pixels_h_float_pix4of16_ks_4_8_16_avx2(
     }
   }
 
-  if constexpr (!safe_aligned_mode) {
+  if JPSDR_CONSTEXPR (!safe_aligned_mode) {
     // Right edge case.
     // Coeffs are zero padded, reading them is no problem.
     // But if we read past the end of source then we can get possible NaN contamination.

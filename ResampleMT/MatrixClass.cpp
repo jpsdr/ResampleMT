@@ -34,9 +34,9 @@
 #endif
 
 // If not Linux it's MSVC
-#if not defined(USING_LINUX)
+#if !defined(USING_LINUX)
 
- // VS 2013
+// VS 2013
 #if _MSC_VER >= 1800
 #define AVX2_BUILD_POSSIBLE
 #endif

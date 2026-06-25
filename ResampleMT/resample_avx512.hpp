@@ -39,6 +39,14 @@ Functions here are static, they will be compiled into each translation unit incl
 
 */
 
+// VS 2019
+#if (_MSC_VER >= 1922) || defined(__clang__)
+  #define JPSDR_CONSTEXPR constexpr
+#else
+  #define JPSDR_CONSTEXPR
+#endif
+
+
 #ifndef _M_X64
 constexpr std::uint64_t make_low_mask64(int bit_count) noexcept
 {
@@ -89,7 +97,7 @@ template<bool UseVBMI>
 __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnni,avx512vbmi,avx512vbmi2,avx512bitalg,avx512vpopcntdq")))
 #endif
 AVS_FORCEINLINE static __m512i _mm512_permutex2var_epi8_SIMUL(__m512i a, __m512i idx, __m512i b) {
-  if constexpr (UseVBMI) {
+  if JPSDR_CONSTEXPR (UseVBMI) {
     return _mm512_permutex2var_epi8(a, idx, b);
   }
   else {
@@ -120,7 +128,7 @@ AVS_FORCEINLINE static __m512i _mm512_maskz_permutex2var_epi8_SIMUL(
   __m512i idx,
   __m512i b)
 {
-  if constexpr (UseVBMI) {
+  if JPSDR_CONSTEXPR (UseVBMI) {
     return _mm512_maskz_permutex2var_epi8(k, a, idx, b);
   }
   else {
@@ -465,7 +473,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks4_pretransposed_coeffs_
       __m512i wi_r0r1_32_63lo={},sa_r0r1_32_63lo={},wi_r0r1_32_63hi={},sa_r0r1_32_63hi={};
       __m512i wi_r2r3_0_31lo={},sa_r2r3_0_31lo={},wi_r2r3_0_31hi={},sa_r2r3_0_31hi={};
       __m512i wi_r2r3_32_63lo={},sa_r2r3_32_63lo={},wi_r2r3_32_63hi={},sa_r2r3_32_63hi={};
-      if constexpr (!UseVNNI) {
+      if JPSDR_CONSTEXPR (!UseVNNI) {
         const __m512i c_8w = _mm512_set1_epi16(8);
         auto make_wi_sa = [&](__m512i p, __m512i& wi, __m512i& sa) {
           wi = _mm512_srli_epi16(p, 1);
@@ -504,7 +512,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks4_pretransposed_coeffs_
         // 8 coeffs + 8 permute_idx + 2 src + 4 temporal + 1 rounder ~= 23 regs (permute2var overwrite first source - really may be more needed)
         __m512i data_src, data_src2;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // Safe masked loads for the image edge
           data_src = _mm512_maskz_loadu_epi8(k1, src_ptr);
           data_src2 = _mm512_maskz_loadu_epi8(k2, src_ptr + 64);
@@ -517,7 +525,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks4_pretransposed_coeffs_
 
         __m512i src_r0r1_0_31lo, src_r0r1_0_31hi, src_r0r1_32_63lo, src_r0r1_32_63hi;
         __m512i src_r2r3_0_31lo, src_r2r3_0_31hi, src_r2r3_32_63lo, src_r2r3_32_63hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r0r1_0_31lo  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_r0r1_0_31lo,  data_src2);
           src_r0r1_0_31hi  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_r0r1_0_31hi,  data_src2);
           src_r0r1_32_63lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_r0r1_32_63lo, data_src2);
@@ -540,7 +548,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks4_pretransposed_coeffs_
         __m512i result_0_31lo, result_0_31hi;
         __m512i result_32_63lo, result_32_63hi;
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo, coef_r0r1_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r2r3_0_31lo, coef_r2r3_0_31lo);
@@ -680,7 +688,7 @@ AVS_FORCEINLINE static void process_row_pair(
     _mm512_permutex2var_epi16(d48_63, p_32_hi, d2_48_63));
 
   // Accumulate results
-  if constexpr (UseVNNI) {
+  if JPSDR_CONSTEXPR (UseVNNI) {
     res_lo = _mm512_dpwssd_epi32(res_lo, src_lo, c_lo);
     res_hi = _mm512_dpwssd_epi32(res_hi, src_hi, c_hi);
     res_32_63lo = _mm512_dpwssd_epi32(res_32_63lo, src_32_63lo, c_32_63lo);
@@ -693,7 +701,7 @@ AVS_FORCEINLINE static void process_row_pair(
     res_32_63hi = _mm512_add_epi32(res_32_63hi, _mm512_madd_epi16(src_32_63hi, c_32_63hi));
   }
 
-  if constexpr (AdvancePerm) {
+  if JPSDR_CONSTEXPR (AdvancePerm) {
     p_lo = _mm512_add_epi16(p_lo, v_two);
     p_hi = _mm512_add_epi16(p_hi, v_two);
     p_32_lo = _mm512_add_epi16(p_32_lo, v_two);
@@ -825,7 +833,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
       __m512i wi_r4r5_32_63lo={},sa_r4r5_32_63lo={},wi_r4r5_32_63hi={},sa_r4r5_32_63hi={};
       __m512i wi_r6r7_0_31lo={},sa_r6r7_0_31lo={},wi_r6r7_0_31hi={},sa_r6r7_0_31hi={};
       __m512i wi_r6r7_32_63lo={},sa_r6r7_32_63lo={},wi_r6r7_32_63hi={},sa_r6r7_32_63hi={};
-      if constexpr (!UseVNNI) {
+      if JPSDR_CONSTEXPR (!UseVNNI) {
         const __m512i c_8w = _mm512_set1_epi16(8);
         auto make_wi_sa = [&](__m512i p, __m512i& wi, __m512i& sa) {
           wi = _mm512_srli_epi16(p, 1);
@@ -872,7 +880,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
         __m512i perm_rNrNp1_32_63lo_w = perm_r0r1_32_63lo;
         __m512i perm_rNrNp1_32_63hi_w = perm_r0r1_32_63hi;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src  = _mm512_maskz_loadu_epi8(k1, src_ptr);
           data_src2 = _mm512_maskz_loadu_epi8(k2, src_ptr + 64);
         }
@@ -883,7 +891,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
 
         // rows 0..1
         __m512i src_r0r1_0_31lo, src_r0r1_0_31hi, src_r0r1_32_63lo, src_r0r1_32_63hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r0r1_0_31lo  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w,  data_src2);
           src_r0r1_0_31hi  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w,  data_src2);
           src_r0r1_32_63lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_32_63lo_w, data_src2);
@@ -902,7 +910,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
         perm_rNrNp1_32_63hi_w = _mm512_add_epi16(perm_rNrNp1_32_63hi_w, two_epi16);
 
         __m512i src_r2r3_0_31lo, src_r2r3_0_31hi, src_r2r3_32_63lo, src_r2r3_32_63hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r2r3_0_31lo  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w,  data_src2);
           src_r2r3_0_31hi  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w,  data_src2);
           src_r2r3_32_63lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_32_63lo_w, data_src2);
@@ -923,7 +931,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
         __m512i result_0_31lo, result_0_31hi;
         __m512i result_32_63lo, result_32_63hi;
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo,  coef_r0r1_0_31lo);
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r2r3_0_31lo,  coef_r2r3_0_31lo);
@@ -944,7 +952,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
 
         // rows 4..5
         __m512i src_r4r5_0_31lo, src_r4r5_0_31hi, src_r4r5_32_63lo, src_r4r5_32_63hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r4r5_0_31lo  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w,  data_src2);
           src_r4r5_0_31hi  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w,  data_src2);
           src_r4r5_32_63lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_32_63lo_w, data_src2);
@@ -963,7 +971,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
         perm_rNrNp1_32_63hi_w = _mm512_add_epi16(perm_rNrNp1_32_63hi_w, two_epi16);
 
         __m512i src_r6r7_0_31lo, src_r6r7_0_31hi, src_r6r7_32_63lo, src_r6r7_32_63hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r6r7_0_31lo  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w,  data_src2);
           src_r6r7_0_31hi  = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w,  data_src2);
           src_r6r7_32_63lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_32_63lo_w, data_src2);
@@ -975,7 +983,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks8_pretransposed_coeffs_
           src_r6r7_32_63hi = _permutex2var_epi8_sim_get32(wi_r6r7_32_63hi, sa_r6r7_32_63hi, data_src, data_src2);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r4r5_0_31lo,  coef_r4r5_0_31lo);
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r6r7_0_31lo,  coef_r6r7_0_31lo);
@@ -1130,7 +1138,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
       __m512i wi_r10r11_lo={},sa_r10r11_lo={},wi_r10r11_hi={},sa_r10r11_hi={};
       __m512i wi_r12r13_lo={},sa_r12r13_lo={},wi_r12r13_hi={},sa_r12r13_hi={};
       __m512i wi_r14r15_lo={},sa_r14r15_lo={},wi_r14r15_hi={},sa_r14r15_hi={};
-      if constexpr (!UseVNNI) {
+      if JPSDR_CONSTEXPR (!UseVNNI) {
         const __m512i c_8w = _mm512_set1_epi16(8);
         auto make_wi_sa = [&](__m512i p, __m512i& wi, __m512i& sa) {
           wi = _mm512_srli_epi16(p, 1);
@@ -1175,7 +1183,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
         __m512i perm_rNrNp1_0_31lo_w = perm_r0r1_0_31lo;
         __m512i perm_rNrNp1_0_31hi_w = perm_r0r1_0_31hi;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src  = _mm512_maskz_loadu_epi8(k1, src_ptr);
           data_src2 = _mm512_maskz_loadu_epi8(k2, src_ptr + 64);
         }
@@ -1186,7 +1194,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
 
         // rows 0..1
         __m512i src_r0r1_0_31lo, src_r0r1_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r0r1_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r0r1_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1199,7 +1207,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
         __m512i src_r2r3_0_31lo, src_r2r3_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r2r3_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r2r3_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1213,7 +1221,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
 
         __m512i result_0_31lo, result_0_31hi;
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo, coef_r0r1_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r2r3_0_31lo, coef_r2r3_0_31lo);
@@ -1228,7 +1236,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
 
         // rows 4..5
         __m512i src_r4r5_0_31lo, src_r4r5_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r4r5_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r4r5_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1241,7 +1249,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
         __m512i src_r6r7_0_31lo, src_r6r7_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r6r7_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r6r7_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1253,7 +1261,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31lo_w = _mm512_add_epi16(perm_rNrNp1_0_31lo_w, two_epi16);
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r4r5_0_31lo, coef_r4r5_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r6r7_0_31lo, coef_r6r7_0_31lo);
@@ -1270,7 +1278,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
 
         // rows 8..9
         __m512i src_r8r9_0_31lo, src_r8r9_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r8r9_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r8r9_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1283,7 +1291,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
         __m512i src_r10r11_0_31lo, src_r10r11_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r10r11_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r10r11_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1295,7 +1303,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31lo_w = _mm512_add_epi16(perm_rNrNp1_0_31lo_w, two_epi16);
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r8r9_0_31lo,   coef_r8r9_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r10r11_0_31lo, coef_r10r11_0_31lo);
@@ -1312,7 +1320,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
 
         // rows 12..13
         __m512i src_r12r13_0_31lo, src_r12r13_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r12r13_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r12r13_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1325,7 +1333,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
         __m512i src_r14r15_0_31lo, src_r14r15_0_31hi;
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r14r15_0_31lo = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31lo_w, data_src2);
           src_r14r15_0_31hi = _mm512_maskz_permutex2var_epi8(k_zh8, data_src, perm_rNrNp1_0_31hi_w, data_src2);
         } else {
@@ -1333,7 +1341,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_ks16_pretransposed_coeffs
           src_r14r15_0_31hi = _permutex2var_epi8_sim_get32(wi_r14r15_hi, sa_r14r15_hi, data_src, data_src2);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r12r13_0_31lo, coef_r12r13_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r14r15_0_31lo, coef_r14r15_0_31lo);
@@ -1456,7 +1464,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_2s32_ks64_pretransposed_c
       // perm_1 = perm_0 + 1: wi_p1[i] = wi_p0[i] + (perm_0[i] & 1), sa_p1 = sa_p0 ^ 8.
       __m512i wi_g1_p0_base = {}, wi_g2_p0_base = {}, wi_g1_p1_base = {}, wi_g2_p1_base = {};
       __m512i sa_g1_p0 = {}, sa_g2_p0 = {}, sa_g1_p1 = {}, sa_g2_p1 = {};
-      if constexpr (!UseVNNI) {
+      if JPSDR_CONSTEXPR (!UseVNNI) {
         const __m512i c_8w = _mm512_set1_epi16(8);
         sa_g1_p0      = _mm512_and_si512(_mm512_slli_epi16(perm_0_0_31, 3), c_8w);
         wi_g1_p0_base = _mm512_srli_epi16(perm_0_0_31, 1);
@@ -1495,7 +1503,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_2s32_ks64_pretransposed_c
         // VBMI: reset working perm copies per row; BASE: reset running wi counters per row
         __m512i perm_0_0_31w = {}, perm_0_32_63w = {}, perm_1_0_31w = {}, perm_1_32_63w = {};
         __m512i wi_g1_p0 = {}, wi_g2_p0 = {}, wi_g1_p1 = {}, wi_g2_p1 = {};
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           perm_0_0_31w  = perm_0_0_31;
           perm_0_32_63w = perm_0_32_63;
           perm_1_0_31w  = perm_1_0_31;
@@ -1507,7 +1515,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_2s32_ks64_pretransposed_c
           wi_g2_p1 = wi_g2_p1_base;
         }
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src    = _mm512_maskz_loadu_epi8(k1,   src_ptr);
           data_src2   = _mm512_maskz_loadu_epi8(k2,   src_ptr + 64);
           data_src_2  = _mm512_maskz_loadu_epi8(k1_2, src_ptr_2);
@@ -1530,7 +1538,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_2s32_ks64_pretransposed_c
         for (int kr = 0; kr < filter_size_real; kr += 2)
         {
           __m512i src_r0_0_31, src_r0_32_63, src_r1_0_31, src_r1_32_63;
-          if constexpr (UseVNNI) {
+          if JPSDR_CONSTEXPR (UseVNNI) {
             src_r0_0_31  = _mm512_maskz_permutex2var_epi8_SIMUL<true>(k_zh8, data_src,   perm_0_0_31w,  data_src2);
             src_r0_32_63 = _mm512_maskz_permutex2var_epi8_SIMUL<true>(k_zh8, data_src_2, perm_0_32_63w, data_src2_2);
             src_r1_0_31  = _mm512_maskz_permutex2var_epi8_SIMUL<true>(k_zh8, data_src,   perm_1_0_31w,  data_src2);
@@ -1557,7 +1565,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_mpz_2s32_ks64_pretransposed_c
           __m512i src_r0r1_32_63lo = _mm512_unpacklo_epi16(src_r0_32_63, src_r1_32_63);
           __m512i src_r0r1_32_63hi = _mm512_unpackhi_epi16(src_r0_32_63, src_r1_32_63);
 
-          if constexpr (UseVNNI)
+          if JPSDR_CONSTEXPR (UseVNNI)
           {
             result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r0r1_0_31lo,  _mm512_load_si512(current_coeff_SIMDw + 0));
             result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r0r1_0_31hi,  _mm512_load_si512(current_coeff_SIMDw + 1));
@@ -1733,7 +1741,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_pretransposed_coeffs
       __m512i wi_lo_5 = {}, sa_lo_5 = {}, wi_hi_5 = {}, sa_hi_5 = {};
       __m512i wi_lo_6 = {}, sa_lo_6 = {}, wi_hi_6 = {}, sa_hi_6 = {};
       __m512i wi_lo_7 = {}, sa_lo_7 = {}, wi_hi_7 = {}, sa_hi_7 = {};
-      if constexpr (!UseVNNI) {
+      if JPSDR_CONSTEXPR (!UseVNNI) {
         const __m512i c_8 = _mm512_set1_epi16(8);
         auto make_wi_sa = [&](const __m512i pw, __m512i &wi_lo, __m512i &sa_lo, __m512i &wi_hi, __m512i &sa_hi) {
           __m512i lo = _mm512_cvtepu8_epi16(_mm512_castsi512_si256(pw));
@@ -1763,7 +1771,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_pretransposed_coeffs
       __m256i comb_23_g1lo={}, comb_23_g1hi={}, comb_23_g2lo={}, comb_23_g2hi={};
       __m256i comb_45_g1lo={}, comb_45_g1hi={}, comb_45_g2lo={}, comb_45_g2hi={};
       __m256i comb_67_g1lo={}, comb_67_g1hi={}, comb_67_g2lo={}, comb_67_g2hi={};
-      if constexpr (UseVNNI) {
+      if JPSDR_CONSTEXPR (UseVNNI) {
         auto make_combined = [&](__m256i pa, __m256i pb, __m256i& clo, __m256i& chi) {
           __m256i t0 = _mm256_unpacklo_epi8(pa, pb);
           __m256i t1 = _mm256_unpackhi_epi8(pa, pb);
@@ -1787,7 +1795,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_pretransposed_coeffs
       {
         __m512i data_src, data_src2, data_src_2, data_src2_2;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src    = _mm512_maskz_loadu_epi8(k1,   src_ptr);
           data_src2   = _mm512_maskz_loadu_epi8(k2,   src_ptr   + 64);
           data_src_2  = _mm512_maskz_loadu_epi8(k1_2, src_ptr_2);
@@ -1803,7 +1811,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_pretransposed_coeffs
         __m512i src_r0r1_0_31lo, src_r0r1_0_31hi, src_r0r1_32_63lo, src_r0r1_32_63hi;
         __m512i src_r2r3_0_31lo, src_r2r3_0_31hi, src_r2r3_32_63lo, src_r2r3_32_63hi;
 
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           // 512-bit vpermi2b keeps the full 128-byte source window (256-bit vpermi2b only
           // addresses 64 bytes, corrupting pixels whose index falls in data_src[32..63]).
           // castsi256_si512 on index = free (upper 32 index bytes are undefined but only
@@ -1839,7 +1847,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_pretransposed_coeffs
 
         __m512i result_0_31lo, result_0_31hi, result_32_63lo, result_32_63hi;
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo,  coef_r0r1_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31hi,  coef_r0r1_0_31hi);
@@ -1861,7 +1869,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_pretransposed_coeffs
         __m512i src_r4r5_0_31lo, src_r4r5_0_31hi, src_r4r5_32_63lo, src_r4r5_32_63hi;
         __m512i src_r6r7_0_31lo, src_r6r7_0_31hi, src_r6r7_32_63lo, src_r6r7_32_63hi;
 
-        if constexpr (UseVNNI) {
+        if JPSDR_CONSTEXPR (UseVNNI) {
           src_r4r5_0_31lo  = _mm512_cvtepu8_epi16(_mm512_castsi512_si256(_mm512_permutex2var_epi8(data_src,   _mm512_castsi256_si512(comb_45_g1lo), data_src2)));
           src_r4r5_0_31hi  = _mm512_cvtepu8_epi16(_mm512_castsi512_si256(_mm512_permutex2var_epi8(data_src,   _mm512_castsi256_si512(comb_45_g1hi), data_src2)));
           src_r4r5_32_63lo = _mm512_cvtepu8_epi16(_mm512_castsi512_si256(_mm512_permutex2var_epi8(data_src_2, _mm512_castsi256_si512(comb_45_g2lo), data_src2_2)));
@@ -1889,7 +1897,7 @@ void resize_h_planar_uint8_avx512_permutex_vstripe_2s32_ks8_pretransposed_coeffs
           src_r6r7_32_63hi = _mm512_unpackhi_epi16(d6h, d7h);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r4r5_0_31lo,  coef_r4r5_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r4r5_0_31hi,  coef_r4r5_0_31hi);
@@ -2061,7 +2069,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks4_pretransposed_co
         __m512i perm_rNrNp1_32_63lo = perm_r0r1_32_63lo;
         __m512i perm_rNrNp1_32_63hi = perm_r0r1_32_63hi;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src_0_31   = _mm512_maskz_loadu_epi16(k1_0_31,  src_ptr_0_31);
           data_src2_0_31  = _mm512_maskz_loadu_epi16(k2_0_31,  src_ptr_0_31  + 32);
           data_src_32_63  = _mm512_maskz_loadu_epi16(k1_32_63, src_ptr_32_63);
@@ -2085,7 +2093,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks4_pretransposed_co
         perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
         perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r0r1_0_31lo  = _mm512_add_epi16(src_r0r1_0_31lo,  shifttosigned);
           src_r0r1_0_31hi  = _mm512_add_epi16(src_r0r1_0_31hi,  shifttosigned);
           src_r0r1_32_63lo = _mm512_add_epi16(src_r0r1_32_63lo, shifttosigned);
@@ -2094,7 +2102,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks4_pretransposed_co
 
         __m512i result_0_31lo, result_0_31hi, result_32_63lo, result_32_63hi;
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo,  coef_r0r1_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31hi,  coef_r0r1_0_31hi);
@@ -2114,14 +2122,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks4_pretransposed_co
         __m512i src_r2r3_32_63lo = _mm512_permutex2var_epi16(data_src_32_63, perm_rNrNp1_32_63lo, data_src2_32_63);
         __m512i src_r2r3_32_63hi = _mm512_permutex2var_epi16(data_src_32_63, perm_rNrNp1_32_63hi, data_src2_32_63);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r2r3_0_31lo  = _mm512_add_epi16(src_r2r3_0_31lo,  shifttosigned);
           src_r2r3_0_31hi  = _mm512_add_epi16(src_r2r3_0_31hi,  shifttosigned);
           src_r2r3_32_63lo = _mm512_add_epi16(src_r2r3_32_63lo, shifttosigned);
           src_r2r3_32_63hi = _mm512_add_epi16(src_r2r3_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r2r3_0_31lo,  coef_r2r3_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r2r3_0_31hi,  coef_r2r3_0_31hi);
@@ -2136,7 +2144,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks4_pretransposed_co
           result_32_63hi = _mm512_add_epi32(result_32_63hi, _mm512_madd_epi16(src_r2r3_32_63hi, coef_r2r3_32_63hi));
         }
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           result_0_31lo  = _mm512_add_epi32(result_0_31lo,  shiftfromsigned);
           result_0_31hi  = _mm512_add_epi32(result_0_31hi,  shiftfromsigned);
           result_32_63lo = _mm512_add_epi32(result_32_63lo, shiftfromsigned);
@@ -2296,7 +2304,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks8_pretransposed_co
         __m512i perm_rNrNp1_32_63lo = perm_r0r1_32_63lo;
         __m512i perm_rNrNp1_32_63hi = perm_r0r1_32_63hi;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src_0_31   = _mm512_maskz_loadu_epi16(k1_0_31,  src_ptr_0_31);
           data_src2_0_31  = _mm512_maskz_loadu_epi16(k2_0_31,  src_ptr_0_31  + 32);
           data_src_32_63  = _mm512_maskz_loadu_epi16(k1_32_63, src_ptr_32_63);
@@ -2321,14 +2329,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks8_pretransposed_co
         perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
         perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r0r1_0_31lo  = _mm512_add_epi16(src_r0r1_0_31lo,  shifttosigned);
           src_r0r1_0_31hi  = _mm512_add_epi16(src_r0r1_0_31hi,  shifttosigned);
           src_r0r1_32_63lo = _mm512_add_epi16(src_r0r1_32_63lo, shifttosigned);
           src_r0r1_32_63hi = _mm512_add_epi16(src_r0r1_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo,  coef_r0r1_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31hi,  coef_r0r1_0_31hi);
@@ -2353,14 +2361,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks8_pretransposed_co
         perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
         perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r2r3_0_31lo  = _mm512_add_epi16(src_r2r3_0_31lo,  shifttosigned);
           src_r2r3_0_31hi  = _mm512_add_epi16(src_r2r3_0_31hi,  shifttosigned);
           src_r2r3_32_63lo = _mm512_add_epi16(src_r2r3_32_63lo, shifttosigned);
           src_r2r3_32_63hi = _mm512_add_epi16(src_r2r3_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r2r3_0_31lo,  coef_r2r3_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r2r3_0_31hi,  coef_r2r3_0_31hi);
@@ -2385,14 +2393,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks8_pretransposed_co
         perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
         perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r4r5_0_31lo  = _mm512_add_epi16(src_r4r5_0_31lo,  shifttosigned);
           src_r4r5_0_31hi  = _mm512_add_epi16(src_r4r5_0_31hi,  shifttosigned);
           src_r4r5_32_63lo = _mm512_add_epi16(src_r4r5_32_63lo, shifttosigned);
           src_r4r5_32_63hi = _mm512_add_epi16(src_r4r5_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r4r5_0_31lo,  coef_r4r5_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r4r5_0_31hi,  coef_r4r5_0_31hi);
@@ -2412,14 +2420,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks8_pretransposed_co
         __m512i src_r6r7_32_63lo = _mm512_permutex2var_epi16(data_src_32_63, perm_rNrNp1_32_63lo, data_src2_32_63);
         __m512i src_r6r7_32_63hi = _mm512_permutex2var_epi16(data_src_32_63, perm_rNrNp1_32_63hi, data_src2_32_63);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r6r7_0_31lo  = _mm512_add_epi16(src_r6r7_0_31lo,  shifttosigned);
           src_r6r7_0_31hi  = _mm512_add_epi16(src_r6r7_0_31hi,  shifttosigned);
           src_r6r7_32_63lo = _mm512_add_epi16(src_r6r7_32_63lo, shifttosigned);
           src_r6r7_32_63hi = _mm512_add_epi16(src_r6r7_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r6r7_0_31lo,  coef_r6r7_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r6r7_0_31hi,  coef_r6r7_0_31hi);
@@ -2434,7 +2442,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_2s32_ks8_pretransposed_co
           result_32_63hi = _mm512_add_epi32(result_32_63hi, _mm512_madd_epi16(src_r6r7_32_63hi, coef_r6r7_32_63hi));
         }
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           result_0_31lo  = _mm512_add_epi32(result_0_31lo,  shiftfromsigned);
           result_0_31hi  = _mm512_add_epi32(result_0_31hi,  shiftfromsigned);
           result_32_63lo = _mm512_add_epi32(result_32_63lo, shiftfromsigned);
@@ -2606,7 +2614,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks8_pretransposed_co
         __m512i perm_rNrNp1_32_63lo = perm_r0r1_32_63lo;
         __m512i perm_rNrNp1_32_63hi = perm_r0r1_32_63hi;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src_0_15   = _mm512_maskz_loadu_epi16(k1_0_15,  src_ptr_0_15);
           data_src_16_31  = _mm512_maskz_loadu_epi16(k1_16_31, src_ptr_16_31);
           data_src_32_47  = _mm512_maskz_loadu_epi16(k1_32_47, src_ptr_32_47);
@@ -2639,14 +2647,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks8_pretransposed_co
         perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
         perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r0r1_0_31lo  = _mm512_add_epi16(src_r0r1_0_31lo,  shifttosigned);
           src_r0r1_0_31hi  = _mm512_add_epi16(src_r0r1_0_31hi,  shifttosigned);
           src_r0r1_32_63lo = _mm512_add_epi16(src_r0r1_32_63lo, shifttosigned);
           src_r0r1_32_63hi = _mm512_add_epi16(src_r0r1_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo,  coef_r0r1_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31hi,  coef_r0r1_0_31hi);
@@ -2671,14 +2679,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks8_pretransposed_co
         perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
         perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r2r3_0_31lo  = _mm512_add_epi16(src_r2r3_0_31lo,  shifttosigned);
           src_r2r3_0_31hi  = _mm512_add_epi16(src_r2r3_0_31hi,  shifttosigned);
           src_r2r3_32_63lo = _mm512_add_epi16(src_r2r3_32_63lo, shifttosigned);
           src_r2r3_32_63hi = _mm512_add_epi16(src_r2r3_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r2r3_0_31lo,  coef_r2r3_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r2r3_0_31hi,  coef_r2r3_0_31hi);
@@ -2703,14 +2711,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks8_pretransposed_co
         perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
         perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r4r5_0_31lo  = _mm512_add_epi16(src_r4r5_0_31lo,  shifttosigned);
           src_r4r5_0_31hi  = _mm512_add_epi16(src_r4r5_0_31hi,  shifttosigned);
           src_r4r5_32_63lo = _mm512_add_epi16(src_r4r5_32_63lo, shifttosigned);
           src_r4r5_32_63hi = _mm512_add_epi16(src_r4r5_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r4r5_0_31lo,  coef_r4r5_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r4r5_0_31hi,  coef_r4r5_0_31hi);
@@ -2730,14 +2738,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks8_pretransposed_co
         __m512i src_r6r7_32_63lo = _mm512_mask_blend_epi16(k_high, _mm512_permutex2var_epi16(data_src_32_47, perm_rNrNp1_32_63lo, data_src2_32_47), _mm512_permutex2var_epi16(data_src_48_63, perm_rNrNp1_32_63lo, data_src2_48_63));
         __m512i src_r6r7_32_63hi = _mm512_mask_blend_epi16(k_high, _mm512_permutex2var_epi16(data_src_32_47, perm_rNrNp1_32_63hi, data_src2_32_47), _mm512_permutex2var_epi16(data_src_48_63, perm_rNrNp1_32_63hi, data_src2_48_63));
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r6r7_0_31lo  = _mm512_add_epi16(src_r6r7_0_31lo,  shifttosigned);
           src_r6r7_0_31hi  = _mm512_add_epi16(src_r6r7_0_31hi,  shifttosigned);
           src_r6r7_32_63lo = _mm512_add_epi16(src_r6r7_32_63lo, shifttosigned);
           src_r6r7_32_63hi = _mm512_add_epi16(src_r6r7_32_63hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r6r7_0_31lo,  coef_r6r7_0_31lo);
           result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r6r7_0_31hi,  coef_r6r7_0_31hi);
@@ -2752,7 +2760,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks8_pretransposed_co
           result_32_63hi = _mm512_add_epi32(result_32_63hi, _mm512_madd_epi16(src_r6r7_32_63hi, coef_r6r7_32_63hi));
         }
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           result_0_31lo  = _mm512_add_epi32(result_0_31lo,  shiftfromsigned);
           result_0_31hi  = _mm512_add_epi32(result_0_31hi,  shiftfromsigned);
           result_32_63lo = _mm512_add_epi32(result_32_63lo, shiftfromsigned);
@@ -2896,7 +2904,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks16_pretransposed_coeffs
         __m512i perm_rNrNp1_0_31lo_w = perm_r0r1_0_31lo;
         __m512i perm_rNrNp1_0_31hi_w = perm_r0r1_0_31hi;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src  = _mm512_maskz_loadu_epi16(k1, src_ptr);
           data_src2 = _mm512_maskz_loadu_epi16(k2, src_ptr + 32);
         }
@@ -2919,14 +2927,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks16_pretransposed_coeffs
 
         __m512i result_0_31lo, result_0_31hi;
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r0r1_0_31lo = _mm512_add_epi16(src_r0r1_0_31lo, shifttosigned);
           src_r0r1_0_31hi = _mm512_add_epi16(src_r0r1_0_31hi, shifttosigned);
           src_r2r3_0_31lo = _mm512_add_epi16(src_r2r3_0_31lo, shifttosigned);
           src_r2r3_0_31hi = _mm512_add_epi16(src_r2r3_0_31hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(rounder, src_r0r1_0_31lo, coef_r0r1_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r2r3_0_31lo, coef_r2r3_0_31lo);
@@ -2951,14 +2959,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31lo_w = _mm512_add_epi16(perm_rNrNp1_0_31lo_w, two_epi16);
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r4r5_0_31lo = _mm512_add_epi16(src_r4r5_0_31lo, shifttosigned);
           src_r4r5_0_31hi = _mm512_add_epi16(src_r4r5_0_31hi, shifttosigned);
           src_r6r7_0_31lo = _mm512_add_epi16(src_r6r7_0_31lo, shifttosigned);
           src_r6r7_0_31hi = _mm512_add_epi16(src_r6r7_0_31hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r4r5_0_31lo, coef_r4r5_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r6r7_0_31lo, coef_r6r7_0_31lo);
@@ -2985,14 +2993,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks16_pretransposed_coeffs
         perm_rNrNp1_0_31lo_w = _mm512_add_epi16(perm_rNrNp1_0_31lo_w, two_epi16);
         perm_rNrNp1_0_31hi_w = _mm512_add_epi16(perm_rNrNp1_0_31hi_w, two_epi16);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r8r9_0_31lo   = _mm512_add_epi16(src_r8r9_0_31lo,   shifttosigned);
           src_r8r9_0_31hi   = _mm512_add_epi16(src_r8r9_0_31hi,   shifttosigned);
           src_r10r11_0_31lo = _mm512_add_epi16(src_r10r11_0_31lo, shifttosigned);
           src_r10r11_0_31hi = _mm512_add_epi16(src_r10r11_0_31hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r8r9_0_31lo,   coef_r8r9_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r10r11_0_31lo, coef_r10r11_0_31lo);
@@ -3016,14 +3024,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks16_pretransposed_coeffs
         __m512i src_r14r15_0_31lo = _mm512_permutex2var_epi16(data_src, perm_rNrNp1_0_31lo_w, data_src2);
         __m512i src_r14r15_0_31hi = _mm512_permutex2var_epi16(data_src, perm_rNrNp1_0_31hi_w, data_src2);
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src_r12r13_0_31lo = _mm512_add_epi16(src_r12r13_0_31lo, shifttosigned);
           src_r12r13_0_31hi = _mm512_add_epi16(src_r12r13_0_31hi, shifttosigned);
           src_r14r15_0_31lo = _mm512_add_epi16(src_r14r15_0_31lo, shifttosigned);
           src_r14r15_0_31hi = _mm512_add_epi16(src_r14r15_0_31hi, shifttosigned);
         }
 
-        if constexpr (UseVNNI)
+        if JPSDR_CONSTEXPR (UseVNNI)
         {
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r12r13_0_31lo, coef_r12r13_0_31lo);
           result_0_31lo = _mm512_dpwssd_epi32(result_0_31lo, src_r14r15_0_31lo, coef_r14r15_0_31lo);
@@ -3041,7 +3049,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_ks16_pretransposed_coeffs
           result_0_31hi = _mm512_add_epi32(result_0_31hi, rounder);
         }
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           result_0_31lo = _mm512_add_epi32(result_0_31lo, shiftfromsigned);
           result_0_31hi = _mm512_add_epi32(result_0_31hi, shiftfromsigned);
         }
@@ -3186,7 +3194,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks48_pretransposed_c
         __m512i perm_rNrNp1_32_63lo = perm_r0r1_32_63lo;
         __m512i perm_rNrNp1_32_63hi = perm_r0r1_32_63hi;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           data_src_0_15   = _mm512_maskz_loadu_epi16(k1_0_15,  src_ptr_0_15);
           data_src_16_31  = _mm512_maskz_loadu_epi16(k1_16_31, src_ptr_16_31);
           data_src_32_47  = _mm512_maskz_loadu_epi16(k1_32_47, src_ptr_32_47);
@@ -3226,14 +3234,14 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks48_pretransposed_c
           perm_rNrNp1_32_63lo = _mm512_add_epi16(perm_rNrNp1_32_63lo, two_epi16);
           perm_rNrNp1_32_63hi = _mm512_add_epi16(perm_rNrNp1_32_63hi, two_epi16);
 
-          if constexpr (!lessthan16bit) {
+          if JPSDR_CONSTEXPR (!lessthan16bit) {
             src_r0r1_0_31lo  = _mm512_add_epi16(src_r0r1_0_31lo,  shifttosigned);
             src_r0r1_0_31hi  = _mm512_add_epi16(src_r0r1_0_31hi,  shifttosigned);
             src_r0r1_32_63lo = _mm512_add_epi16(src_r0r1_32_63lo, shifttosigned);
             src_r0r1_32_63hi = _mm512_add_epi16(src_r0r1_32_63hi, shifttosigned);
           }
 
-          if constexpr (UseVNNI)
+          if JPSDR_CONSTEXPR (UseVNNI)
           {
             result_0_31lo  = _mm512_dpwssd_epi32(result_0_31lo,  src_r0r1_0_31lo,  _mm512_load_si512(current_coeff_SIMDw + 0));
             result_0_31hi  = _mm512_dpwssd_epi32(result_0_31hi,  src_r0r1_0_31hi,  _mm512_load_si512(current_coeff_SIMDw + 1));
@@ -3251,7 +3259,7 @@ void resize_h_planar_uint16_avx512_permutex_vstripe_mp_4s16_ks48_pretransposed_c
           current_coeff_SIMDw += 4;
         }
 
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           result_0_31lo  = _mm512_add_epi32(result_0_31lo,  shiftfromsigned);
           result_0_31hi  = _mm512_add_epi32(result_0_31hi,  shiftfromsigned);
           result_32_63lo = _mm512_add_epi32(result_32_63lo, shiftfromsigned);

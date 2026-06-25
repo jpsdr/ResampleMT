@@ -142,14 +142,14 @@ __attribute__((__target__("avx512f,avx512cd,avx512bw,avx512dq,avx512vl,avx512vnn
 AVS_FORCEINLINE static void process_two_16pixels_core(const pixel_t * __restrict src, int begin1, int begin2, int i, const short* __restrict current_coeff, int filter_size, __m256i & result1, __m256i & result2, __m256i & shifttosigned) {
   __m256i data_1, data_2;
 
-  if constexpr (sizeof(pixel_t) == 1) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
     data_1 = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin1 + i)));
     data_2 = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin2 + i)));
   }
   else {
     data_1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + begin1 + i));
     data_2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + begin2 + i));
-    if constexpr (!lessthan16bit) {
+    if JPSDR_CONSTEXPR (!lessthan16bit) {
       data_1 = _mm256_add_epi16(data_1, shifttosigned);
       data_2 = _mm256_add_epi16(data_2, shifttosigned);
     }
@@ -177,7 +177,7 @@ AVS_FORCEINLINE static void process_four_16pixels_core(const pixel_t* __restrict
   __m256i& result1, __m256i& result2, __m256i& result3, __m256i& result4, __m256i& shifttosigned) {
   __m256i data_1, data_2, data_3, data_4;
 
-  if constexpr (sizeof(pixel_t) == 1) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
     data_1 = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin1 + i)));
     data_2 = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin2 + i)));
     data_3 = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin3 + i)));
@@ -188,7 +188,7 @@ AVS_FORCEINLINE static void process_four_16pixels_core(const pixel_t* __restrict
     data_2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + begin2 + i));
     data_3 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + begin3 + i));
     data_4 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + begin4 + i));
-    if constexpr (!lessthan16bit) {
+    if JPSDR_CONSTEXPR (!lessthan16bit) {
       data_1 = _mm256_add_epi16(data_1, shifttosigned);
       data_2 = _mm256_add_epi16(data_2, shifttosigned);
       data_3 = _mm256_add_epi16(data_3, shifttosigned);
@@ -225,8 +225,8 @@ AVS_FORCEINLINE static void process_two_partial_unrolled(const pixel_t* src, int
   __m128i d1, d2;
 
   // Load Data
-  if constexpr (sizeof(pixel_t) == 1) {
-    if constexpr (Taps == 4) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
+    if JPSDR_CONSTEXPR (Taps == 4) {
       d1 = _mm_cvtepu8_epi16(_mm_cvtsi32_si128(*reinterpret_cast<const int*>(src + begin1 + offset)));
       d2 = _mm_cvtepu8_epi16(_mm_cvtsi32_si128(*reinterpret_cast<const int*>(src + begin2 + offset)));
     }
@@ -236,7 +236,7 @@ AVS_FORCEINLINE static void process_two_partial_unrolled(const pixel_t* src, int
     }
   }
   else {
-    if constexpr (Taps == 4) {
+    if JPSDR_CONSTEXPR (Taps == 4) {
       d1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src + begin1 + offset));
       d2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src + begin2 + offset));
     }
@@ -244,7 +244,7 @@ AVS_FORCEINLINE static void process_two_partial_unrolled(const pixel_t* src, int
       d1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin1 + offset));
       d2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin2 + offset));
     }
-    if constexpr (!lessthan16bit) {
+    if JPSDR_CONSTEXPR (!lessthan16bit) {
       d1 = _mm_add_epi16(d1, _mm256_castsi256_si128(shifttosigned));
       d2 = _mm_add_epi16(d2, _mm256_castsi256_si128(shifttosigned));
     }
@@ -252,7 +252,7 @@ AVS_FORCEINLINE static void process_two_partial_unrolled(const pixel_t* src, int
 
   // Load Coeffs (Need to handle offset)
   __m128i c1, c2;
-  if constexpr (Taps == 4) {
+  if JPSDR_CONSTEXPR (Taps == 4) {
     c1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(coeff + offset));
     c2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(coeff + filter_size + offset));
   }
@@ -292,8 +292,8 @@ AVS_FORCEINLINE static void process_four_partial_unrolled(const pixel_t* src,
   __m128i d1, d2, d3, d4;
 
   // Load Data
-  if constexpr (sizeof(pixel_t) == 1) {
-    if constexpr (Taps == 4) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
+    if JPSDR_CONSTEXPR (Taps == 4) {
       d1 = _mm_cvtepu8_epi16(_mm_cvtsi32_si128(*reinterpret_cast<const int*>(src + begin1 + offset)));
       d2 = _mm_cvtepu8_epi16(_mm_cvtsi32_si128(*reinterpret_cast<const int*>(src + begin2 + offset)));
       d3 = _mm_cvtepu8_epi16(_mm_cvtsi32_si128(*reinterpret_cast<const int*>(src + begin3 + offset)));
@@ -307,7 +307,7 @@ AVS_FORCEINLINE static void process_four_partial_unrolled(const pixel_t* src,
     }
   }
   else {
-    if constexpr (Taps == 4) {
+    if JPSDR_CONSTEXPR (Taps == 4) {
       d1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src + begin1 + offset));
       d2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src + begin2 + offset));
       d3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src + begin3 + offset));
@@ -319,7 +319,7 @@ AVS_FORCEINLINE static void process_four_partial_unrolled(const pixel_t* src,
       d3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin3 + offset));
       d4 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + begin4 + offset));
     }
-    if constexpr (!lessthan16bit) {
+    if JPSDR_CONSTEXPR (!lessthan16bit) {
       d1 = _mm_add_epi16(d1, _mm256_castsi256_si128(shifttosigned));
       d2 = _mm_add_epi16(d2, _mm256_castsi256_si128(shifttosigned));
       d3 = _mm_add_epi16(d3, _mm256_castsi256_si128(shifttosigned));
@@ -329,7 +329,7 @@ AVS_FORCEINLINE static void process_four_partial_unrolled(const pixel_t* src,
 
   // Load Coeffs (Need to handle offset)
   __m128i c1, c2, c3, c4;
-  if constexpr (Taps == 4) {
+  if JPSDR_CONSTEXPR (Taps == 4) {
     c1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(coeff + offset));
     c2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(coeff + filter_size + offset));
     c3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(coeff + 2 * filter_size + offset));
@@ -464,15 +464,15 @@ AVS_FORCEINLINE static void process_two_pixels_h_avx512(const pixel_t * __restri
 
   // filter_size here is the stride for coeffs, kernel_size is the actual number of taps to process.
 
-  if constexpr (FixedFilterSize == 4) {
+  if JPSDR_CONSTEXPR (FixedFilterSize == 4) {
     process_two_partial_unrolled<pixel_t, lessthan16bit, 4>(src_ptr, begin1, begin2, 0, current_coeff, filter_size, result1, result2, shifttosigned);
     return;
   }
-  if constexpr (FixedFilterSize == 8) {
+  if JPSDR_CONSTEXPR (FixedFilterSize == 8) {
     process_two_partial_unrolled<pixel_t, lessthan16bit, 8>(src_ptr, begin1, begin2, 0, current_coeff, filter_size, result1, result2, shifttosigned);
     return;
   }
-  if constexpr (FixedFilterSize == 12) {
+  if JPSDR_CONSTEXPR (FixedFilterSize == 12) {
     process_two_partial_unrolled<pixel_t, lessthan16bit, 8>(src_ptr, begin1, begin2, 0, current_coeff, filter_size, result1, result2, shifttosigned);
     process_two_partial_unrolled<pixel_t, lessthan16bit, 4>(src_ptr, begin1, begin2, 8, current_coeff, filter_size, result1, result2, shifttosigned);
     return;
@@ -490,7 +490,7 @@ AVS_FORCEINLINE static void process_two_pixels_h_avx512(const pixel_t * __restri
 
   // 3. Tail Handling
   // If we are in safe mode and FixedSize is a multiple of 32, we are done.
-  if constexpr (safe_aligned_mode && (FixedFilterSize % 16 == 0) && FixedFilterSize > 0) return;
+  if JPSDR_CONSTEXPR (safe_aligned_mode && (FixedFilterSize % 16 == 0) && FixedFilterSize > 0) return;
 
   int remaining = runtime_filter_size - i;
   if (remaining <= 0) return;
@@ -513,14 +513,14 @@ AVS_FORCEINLINE static void process_two_pixels_h_avx512(const pixel_t * __restri
   // Final scalar tail (1-3 pixels)
   while (remaining > 0) {
     int val1, val2;
-    if constexpr (sizeof(pixel_t) == 1) {
+    if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
       val1 = src_ptr[begin1 + i];
       val2 = src_ptr[begin2 + i];
     }
     else {
       val1 = src_ptr[begin1 + i];
       val2 = src_ptr[begin2 + i];
-      if constexpr (!lessthan16bit) { val1 -= 32768; val2 -= 32768; }
+      if JPSDR_CONSTEXPR (!lessthan16bit) { val1 -= 32768; val2 -= 32768; }
     }
     int c1 = current_coeff[i];
     int c2 = current_coeff[filter_size + i];
@@ -550,15 +550,15 @@ AVS_FORCEINLINE static void process_four_pixels_h_avx512(const pixel_t* __restri
 
   // filter_size here is the stride for coeffs, kernel_size is the actual number of taps to process.
 
-  if constexpr (FixedFilterSize == 4) {
+  if JPSDR_CONSTEXPR (FixedFilterSize == 4) {
     process_four_partial_unrolled<pixel_t, lessthan16bit, 4>(src_ptr, begin1, begin2, begin3, begin4, 0, current_coeff, filter_size, result1, result2, result3, result4, shifttosigned);
     return;
   }
-  if constexpr (FixedFilterSize == 8) {
+  if JPSDR_CONSTEXPR (FixedFilterSize == 8) {
     process_four_partial_unrolled<pixel_t, lessthan16bit, 8>(src_ptr, begin1, begin2, begin3, begin4, 0, current_coeff, filter_size, result1, result2, result3, result4, shifttosigned);
     return;
   }
-  if constexpr (FixedFilterSize == 12) {
+  if JPSDR_CONSTEXPR (FixedFilterSize == 12) {
     process_four_partial_unrolled<pixel_t, lessthan16bit, 8>(src_ptr, begin1, begin2, begin3, begin4, 0, current_coeff, filter_size, result1, result2, result3, result4, shifttosigned);
     process_four_partial_unrolled<pixel_t, lessthan16bit, 4>(src_ptr, begin1, begin2, begin3, begin4, 8, current_coeff, filter_size, result1, result2, result3, result4, shifttosigned);
     return;
@@ -576,7 +576,7 @@ AVS_FORCEINLINE static void process_four_pixels_h_avx512(const pixel_t* __restri
 
   // 3. Tail Handling
   // If we are in safe mode and FixedSize is a multiple of 32, we are done.
-  if constexpr (safe_aligned_mode && (FixedFilterSize % 16 == 0) && FixedFilterSize > 0) return;
+  if JPSDR_CONSTEXPR (safe_aligned_mode && (FixedFilterSize % 16 == 0) && FixedFilterSize > 0) return;
 
   int remaining = runtime_filter_size - i;
   if (remaining <= 0) return;
@@ -599,7 +599,7 @@ AVS_FORCEINLINE static void process_four_pixels_h_avx512(const pixel_t* __restri
   // Final scalar tail (1-3 pixels)
   while (remaining > 0) {
     int val1, val2, val3, val4;
-    if constexpr (sizeof(pixel_t) == 1) {
+    if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
       val1 = src_ptr[begin1 + i];
       val2 = src_ptr[begin2 + i];
       val3 = src_ptr[begin3 + i];
@@ -610,7 +610,7 @@ AVS_FORCEINLINE static void process_four_pixels_h_avx512(const pixel_t* __restri
       val2 = src_ptr[begin2 + i];
       val3 = src_ptr[begin3 + i];
       val4 = src_ptr[begin4 + i];
-      if constexpr (!lessthan16bit) { val1 -= 32768; val2 -= 32768; val3 -= 32768; val4 -= 32768; }
+      if JPSDR_CONSTEXPR (!lessthan16bit) { val1 -= 32768; val2 -= 32768; val3 -= 32768; val4 -= 32768; }
     }
     int c1 = current_coeff[i];
     int c2 = current_coeff[filter_size + i];
@@ -749,7 +749,7 @@ AVS_FORCEINLINE static void process_sixteen_pixels_h_avx512(const pixel_t * src,
     rounder_scalar);
 
   // 
-  if constexpr (sizeof(pixel_t) == 2 && !lessthan16bit) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 2 && !lessthan16bit) {
     const __m256i shiftfromsigned = _mm256_set1_epi32(+32768 << FPScale16bits);
     result_8x_32_lo = _mm256_add_epi32(result_8x_32_lo, shiftfromsigned);
     result_8x_32_hi = _mm256_add_epi32(result_8x_32_hi, shiftfromsigned);
@@ -769,7 +769,7 @@ AVS_FORCEINLINE static void process_sixteen_pixels_h_avx512(const pixel_t * src,
 
   result_16 =  _mm256_permute4x64_epi64(result_16, (0 << 0) | (2 << 2) | (1 << 4) | (3 << 6));
 
-  if constexpr (sizeof(pixel_t) == 1) {
+  if JPSDR_CONSTEXPR (sizeof(pixel_t) == 1) {
     __m128i result_8 = _mm_packus_epi16(_mm256_castsi256_si128(result_16), _mm256_extracti128_si256(result_16, 1));
     _mm_stream_si128(reinterpret_cast<__m128i*>(dst + x), result_8); // 16x 8bit pixels
   }
@@ -794,7 +794,7 @@ static void internal_resizer_h_avx512_generic(BYTE* dst8, const BYTE* src8, int 
   __m256i shifttosigned = _mm256_set1_epi16(-32768);
   __m256i clamp_limit_min,clamp_limit_max;
 
-  if constexpr (sizeof(pixel_t) == 1)
+  if (sizeof(pixel_t) == 1)
   {
 	const int val_min = (range==1) ? 0 : 16;
 	const int val_max = ((range==1) || (range==4)) ? 255 : (range==2) ? 235 : 240;
@@ -1076,7 +1076,7 @@ void resize_h_planar_float_avx512_transpose_vstripe_ks4(BYTE* dst8, const BYTE* 
         __m512 data_3_7_11_15;
         __m512 data_4_8_12_16;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // In the potentially unsafe zone (near the right edge of the image), we use a safe loading function
           // to prevent reading beyond the allocated source scanline.
           data_1_5_9_13 = _mm512_load_partial_safe_4_m128(src_ptr + begin1, src_ptr + begin5, src_ptr + begin9, src_ptr + begin13, floats_to_load);
@@ -1258,7 +1258,7 @@ void resize_h_planar_float_avx512_transpose_vstripe_ks8(BYTE* dst8, const BYTE* 
 
         __m512 data01, data23, data45, data67, data89, data1011, data1213, data1415;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // In the potentially unsafe zone (near the right edge of the image), we use a safe loading function
           // to prevent reading beyond the allocated source scanline.
           data01 = _mm512_load_partial_safe_2_m256(src_ptr + begin1, src_ptr + begin2, floats_to_load);
@@ -1393,7 +1393,7 @@ void resize_h_planar_float_avx512_permutex_vstripe_ks4(BYTE* dst8, const BYTE* s
       {
         __m512 data_src, data_src2;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // Safe masked loads for the image edge
           // Load first 16 floats
           int rem1 = max(0, min(16, remaining));
@@ -1532,7 +1532,7 @@ void resize_h_planar_float_avx512_permutex_vstripe_ks8(BYTE* dst8, const BYTE* s
       {
         __m512 data_src, data_src2;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // Safe masked loads for the image edge
           // Load first 16 floats
           int rem1 = max(0, min(16, remaining));
@@ -1699,7 +1699,7 @@ void resize_h_planar_float_avx512_permutex_vstripe_2s8_ks8(BYTE* dst8, const BYT
         __m512 data_src_low8, data_src2_low8;
         __m512 data_src_high8, data_src2_high8;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // Safe masked loads for the image edge
           // Load first 16 floats
           data_src_low8 = _mm512_maskz_loadu_ps(k1_low8, src_ptr_low8);
@@ -1859,7 +1859,7 @@ void resize_h_planar_float_avx512_permutex_vstripe_ks16(BYTE* dst8, const BYTE* 
 
         __m512 data_src, data_src2;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // Safe masked loads for the image edge
           // Load first 16 floats
           data_src = _mm512_maskz_loadu_ps(k1, src_ptr);
@@ -2064,7 +2064,7 @@ void resize_h_planar_float_avx512_permutex_vstripe_2s8_ks16(BYTE* dst8, const BY
         __m512 data_src_low8, data_src2_low8;
         __m512 data_src_high8, data_src2_high8;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           // Safe masked loads for the image edge
           // Load first 16 floats
           data_src_low8 = _mm512_maskz_loadu_ps(k1_low8, src_ptr_low8);
@@ -2275,7 +2275,7 @@ void resize_h_planar_float_avx512_permutex_vstripe_4s4_ks16(BYTE* dst8, const BY
       {
         __m512 sg0, sg0b, sg1, sg1b, sg2, sg2b, sg3, sg3b;
 
-        if constexpr (partial_load) {
+        if JPSDR_CONSTEXPR (partial_load) {
           sg0  = _mm512_maskz_loadu_ps(k1_g0, src_g0);
           sg0b = _mm512_maskz_loadu_ps((1U << max(0, min(16, rem_g0 - 16))) - 1, src_g0 + 16);
           sg1  = _mm512_maskz_loadu_ps(k1_g1, src_g1);
@@ -2886,7 +2886,7 @@ void resize_v_avx512_planar_uint16_t_w_sr(BYTE* dst8, const BYTE* src8, int dst_
         __m512i src = _mm512_load_si512(reinterpret_cast<const __m512i*>(src2_ptr)); // 32x 16bit pixels
         __m512i src_2 = _mm512_load_si512(reinterpret_cast<const __m512i*>(src2_ptr + 32)); // 32x 16bit pixels
 
-        if constexpr (!lessthan16bit)
+        if JPSDR_CONSTEXPR (!lessthan16bit)
 		{
           src = _mm512_add_epi16(src, shifttosigned);
           src_2 = _mm512_add_epi16(src_2, shifttosigned);
@@ -2907,7 +2907,7 @@ void resize_v_avx512_planar_uint16_t_w_sr(BYTE* dst8, const BYTE* src8, int dst_
         src2_ptr += src_pitch;
       }
 
-      if constexpr (!lessthan16bit)
+      if JPSDR_CONSTEXPR (!lessthan16bit)
 	  {
         result_lo = _mm512_add_epi32(result_lo, shiftfromsigned);
         result_hi = _mm512_add_epi32(result_hi, shiftfromsigned);
@@ -2952,7 +2952,7 @@ void resize_v_avx512_planar_uint16_t_w_sr(BYTE* dst8, const BYTE* src8, int dst_
         __m512i coeff = _mm512_set1_epi16(current_coeff[i]); // 0|co|0|co|0|co|0|co   0|co|0|co|0|co|0|co
 
         __m512i src = _mm512_load_si512(reinterpret_cast<const __m512i*>(src2_ptr)); // 32x 16bit pixels
-        if constexpr (!lessthan16bit) {
+        if JPSDR_CONSTEXPR (!lessthan16bit) {
           src = _mm512_add_epi16(src, shifttosigned);
         }
         __m512i src_lo = _mm512_unpacklo_epi16(src, zero);
@@ -2963,7 +2963,7 @@ void resize_v_avx512_planar_uint16_t_w_sr(BYTE* dst8, const BYTE* src8, int dst_
         src2_ptr += src_pitch;
       }
 
-      if constexpr (!lessthan16bit)
+      if JPSDR_CONSTEXPR (!lessthan16bit)
 	  {
         result_lo = _mm512_add_epi32(result_lo, shiftfromsigned);
         result_hi = _mm512_add_epi32(result_hi, shiftfromsigned);
@@ -3135,7 +3135,7 @@ AVS_FORCEINLINE static void process_four_pixels_h_float_pix4of16_ks_4_8_16(
 {
 
   // very special case: filter size <= 4
-  if constexpr (safe_aligned_mode) {
+  if JPSDR_CONSTEXPR (safe_aligned_mode) {
     if (filtersize_hint == 0) {
       // Process 4 target pixels and 4 source pixels/coefficients at a time
       // XMM-based loop internally, but returns __m256 with upper 128 cleared
@@ -3174,11 +3174,11 @@ AVS_FORCEINLINE static void process_four_pixels_h_float_pix4of16_ks_4_8_16(
   }
 
   // filter sizes 16 or 32 can return here
-  if constexpr (safe_aligned_mode && (filtersize_hint == 2 || filtersize_hint == 4)) {
+  if JPSDR_CONSTEXPR (safe_aligned_mode && (filtersize_hint == 2 || filtersize_hint == 4)) {
     return;
   }
 
-  if constexpr (!safe_aligned_mode) {
+  if JPSDR_CONSTEXPR (!safe_aligned_mode) {
     if (i == kernel_size) return; // kernel_size is not known compile time
   }
 
@@ -3200,7 +3200,7 @@ AVS_FORCEINLINE static void process_four_pixels_h_float_pix4of16_ks_4_8_16(
     }
   }
 
-  if constexpr (!safe_aligned_mode) {
+  if JPSDR_CONSTEXPR (!safe_aligned_mode) {
     // Right edge case.
     // Coeffs are zero padded, reading them is no problem.
     // But if we read past the end of source then we can get possible NaN contamination.
